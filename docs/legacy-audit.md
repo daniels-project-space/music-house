@@ -221,3 +221,104 @@ Animations as utility keyframes: `animate-breathe`, `animate-cover-pulse`, `anim
 - Doesn't bring RVC, voice swap, KitsAI, Whisper Python wrappers, Pinterest scrapers, or the Aria-style chat helpers
 
 When implementing: read this spec, write fresh code. If a behavior is unclear here, open the legacy file once for reference, then close it.
+
+---
+
+## Appendix A — Visual capture audit (2026-05-02)
+
+Captured all 7 legacy screen states via Playwright headless against live  (revived legacy systemd unit). Screenshots saved to . Inventory JSON at . Read every screenshot via the Read tool before writing the items below.
+
+### Visible structure beyond what the source-only audit caught
+
+**Top-bar (every tab)**
+- Brand: gradient pink→purple title "AI Music Empire" with mono small subtitle below: "SUNO V5.5 · MUREKA V8 · DISTROKID"
+- Six tabs in a tight row, active tab indicated by pink bottom-underline
+- Search input top-right, expands on focus from 180px → 260px (legacy CSS, preserve)
+- Far right: "Hub" link (back to remote-work-hub or project-hub — clarify with Daniel)
+- Generation indicator pill (only visible during active generation): pink pulsing dot + animated text
+
+**Pipeline strip (Library + Studio tabs)**
+- Four stage counters left-aligned: ⚡ Generating / ▦ Mixing / ✓ Ready / 📡 Distributed
+- Each counter: large mono number in stage-color (pink/purple/green/cyan), small mono label below
+- Click on any counter filters the library to that stage
+- Right-aligned: 4 quick stats (TRACKS / ALBUMS / COST / EST. MONTHLY) — also large mono numbers, small mono labels
+
+**Library — additional details**
+- Filter bar above sections: "♥ Hearted" toggle, "☑ Select" enters batch mode, "+ New Album" right-aligned
+- Section icons + colored heading underline (red for film, purple for artist, green for gaming)
+- Cover art is the visual heart — full bleed aspect-square, gradient overlay on bottom for legibility, track count badge bottom-right
+- Hover lifts card -4px + shows shimmer + reveals delete "×" top-right
+- Bottom "Unsorted" track list is collapsed by default (toggle), shows individual tracks with row layout
+
+**Album detail**
+- Two-column-ish: 200px square cover (with cover-pulse animation when playing) + 1.5rem gap + title + meta (genre · track count · duration sum)
+- Action row directly below meta: ▶ Play All (purple) / ⤮ Shuffle / 🔗 Share (cyan) / Complete Album (green) / Studio Mix (purple, hidden unless Suno) — all -style outlined small buttons
+- Track list below: track # / play / title (contenteditable on edit) / duration / heart / mix-toggle / ⋮ menu
+- ⋮ opens dropdown: ♪ Lyrics, 📁 Move, ▶ Playlist, 📡 Distribute, 📦 Archive, 🗑 Delete
+- Now-playing track gets purple left border + tinted bg + pink play button
+
+**Studio**
+- Left column: "Generate Music" card with Artist / Genre dropdowns, Prompt textarea, ✨ Enhance button (purple), then  (gradient solid) +  (outlined) buttons
+- Below: "Suno v5.5" pink-bordered panel with Connected status dot, API Key button, list of suno albums with progress percentages
+- Right column: "Generation Queue" — live-updating list of active jobs, empty state "No active generations"
+- Suno album detail (sub-page): name / artist / genre / track count meta, action row (Gen All, Lyrics, Mix, Autocomplete, Play All, Share), track list, log line at bottom
+
+**Analytics**
+- 3-card stat row × 2: Total Tracks / Distributed / Est. Monthly  +  Cost / Mixed / Albums
+- Genre Distribution horizontal bar chart (mono numbers)
+- Platform Split right column: Spotify / Apple Music / Amazon / YouTube / SoundCloud / Tidal each with $/mo
+- Pipeline strip repeated at bottom (different size —  chart-style)
+
+**Distribution**
+- Two columns side by side: "Ready to Distribute" (green heading) / "Distributed" (cyan)
+- Each is a flat list of track rows
+
+**Playlists**
+- Top input + Create button ()
+- Below: playlist cards with name, track count, ▶ Play / ⤮ Shuffle, expandable track list inside
+
+**Archive**
+- Heading + flat list of archived tracks with Restore button each
+
+**Persistent player (every screen)**
+- Sticky bottom: vinyl record icon (rotating?), track title + artist, prev/play/next, scrubber (clickable seek), shuffle toggle, full-screen toggle far right
+- 8px tall bar below = progress
+- Volume slider + scrubber in mono micro-text
+
+### Gaps in current music-house vs legacy
+
+| # | Legacy element | Current music-house | Priority |
+|---|---|---|---|
+| 1 | 6-tab top nav with active-pink-underline | Plain text links | **High** |
+| 2 | Pipeline strip (4 counters) | Missing | **High** |
+| 3 | Right-side stats row | Missing | **High** |
+| 4 | Filter bar (♥ / ☑ / +) | Missing | **Med** |
+| 5 | Section icons + colored underline | Plain text headings | Med |
+| 6 | Album hover lift + shimmer | Implemented (card-hover) | done |
+| 7 | Album detail header w/ actions row | Bare layout | **High** |
+| 8 | Track row with ⋮ menu | Missing | **High** |
+| 9 | Karaoke lyrics modal | Missing | Med |
+| 10 | Studio two-column (Generate + Queue) | Single-column /create | Med |
+| 11 | Suno panel inside Studio | Missing | Med |
+| 12 | Analytics page | Missing | Low (keep, not v1 critical) |
+| 13 | Distribution two-column | Missing | Low |
+| 14 | Sticky player with scrubber | Implemented (basic) | done |
+| 15 | Now-playing track highlight | Missing | Med |
+| 16 | Search input top-bar | Missing | Med |
+| 17 | Generation indicator pill | Missing | Med |
+| 18 | Edit-in-place track title | Missing | Low |
+| 19 | Drag-and-drop track move / album section | Missing | Low |
+
+### Implementation order (revised after visual)
+
+1. Top-bar redesign (tabs + search + branding + Hub + gen-indicator)
+2. Pipeline strip + right-side stats (component + Convex aggregation query)
+3. Library filter bar
+4. Section bands with icons + colored borders (in place; just polish colors)
+5. Album detail rebuild with cover header + actions + track list
+6. Track row component with ⋮ menu
+7. Karaoke lyrics modal
+8. Studio rebuild (2-column with Suno panel + queue)
+9. Now-playing highlight
+10. Distribution / Analytics / Search / drag-drop — defer
+
