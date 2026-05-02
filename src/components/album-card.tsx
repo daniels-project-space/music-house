@@ -1,22 +1,33 @@
 "use client";
 import Link from "next/link";
 import { useUrlCache } from "./url-cache-provider";
+import type { Id } from "../../convex/_generated/dataModel";
 
 type Props = {
+  albumId?: Id<"albums">;
   artist: string;
   slug: string;
   name: string;
   trackCount: number;
   coverKey?: string;
+  section?: string;
 };
 
-export function AlbumCard({ artist, slug, name, trackCount, coverKey }: Props) {
+export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, section }: Props) {
   const { get } = useUrlCache();
   const coverUrl = coverKey ? get(coverKey) : undefined;
+
+  const onDragStart = (e: React.DragEvent) => {
+    if (!albumId) return;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("application/x-mh-album", JSON.stringify({ albumId, section }));
+  };
 
   return (
     <Link
       href={`/library/${artist}/${slug}`}
+      draggable={!!albumId}
+      onDragStart={onDragStart}
       className="group block rounded-xl overflow-hidden bg-card border card-hover"
       style={{ borderColor: "var(--color-brd)" }}
     >

@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { useQuery } from "convex/react";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { useSearchParams } from "next/navigation";
 import { api } from "../../../convex/_generated/api";
 import { AlbumCard } from "@/components/album-card";
@@ -84,15 +84,16 @@ export default function LibraryPage() {
       <div className="space-y-24">
         {SECTIONS.map((s) => {
           const list = bySection[s.key] ?? [];
-          if (list.length === 0) return null;
           return (
             <Section
               key={s.key}
+              sectionKey={s.key}
               label={s.label}
               icon={s.icon}
               accent={s.accent}
               rule={s.rule}
               count={list.length}
+              hideIfEmpty={list.length === 0}
             >
               <Grid albums={list} tracksByAlbum={tracksByAlbum} />
             </Section>
@@ -120,35 +121,74 @@ export default function LibraryPage() {
 }
 
 function Section({
+  sectionKey,
   label,
   icon,
   accent,
   rule,
   count,
+  hideIfEmpty,
   children,
 }: {
+  sectionKey?: string;
   label: string;
   icon: string;
   accent: string;
   rule: string;
   count: number;
+  hideIfEmpty?: boolean;
   children: React.ReactNode;
 }) {
+  const setSection = useMutation(api.albums.setSection);
+  const [hover, setHover] = useState(false);
+  const isDropTarget = !!sectionKey;
+
+  const onDragOver = (e: React.DragEvent) => {
+    if (!isDropTarget) return;
+    if (!e.dataTransfer.types.includes("application/x-mh-album")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setHover(true);
+  };
+  const onDrop = async (e: React.DragEvent) => {
+    if (!isDropTarget) return;
+    e.preventDefault();
+    setHover(false);
+    const raw = e.dataTransfer.getData("application/x-mh-album");
+    if (!raw) return;
+    try {
+      const data = JSON.parse(raw) as { albumId: string; section?: string };
+      if (data.section === sectionKey) return;
+      await setSection({ id: data.albumId as never, section: sectionKey });
+    } catch {}
+  };
+
+  if (hideIfEmpty && count === 0 && !isDropTarget) return null;
+
   return (
-    <section>
+    <section
+      onDragOver={onDragOver}
+      onDragLeave={() => setHover(false)}
+      onDrop={onDrop}
+      className={hover ? "ring-2 ring-offset-4 ring-offset-bg rounded-2xl transition-all" : "transition-all"}
+      style={hover ? { boxShadow: `0 0 0 2px ${accent}, 0 0 32px ${rule}` } : undefined}
+    >
       <div className="flex items-baseline justify-between mb-7 pb-3" style={{ borderBottom: `1px solid ${rule}` }}>
         <div className="flex items-baseline gap-3">
           <span style={{ color: accent }} className="text-[1.1rem]">{icon}</span>
           <h2 className="font-display text-[1.65rem] font-semibold tracking-tight" style={{ color: accent }}>{label}</h2>
+          {isDropTarget && count === 0 && (
+            <span className="font-mono text-[0.55rem] uppercase tracking-[0.2em] text-paper-faint">drop here</span>
+          )}
         </div>
         <span className="font-mono text-[0.6rem] uppercase tracking-[0.22em] text-paper-faint">{count} albums</span>
       </div>
-      {children}
+      {count > 0 && children}
     </section>
   );
 }
 
-function Grid({ albums, tracksByAlbum }: { albums: { _id: string; artistSlug: string; slug: string; name: string; coverKey?: string }[]; tracksByAlbum: Map<string, number>; }) {
+function Grid({ albums, tracksByAlbum }: { albums: { _id: string; artistSlug: string; slug: string; name: string; coverKey?: string; section?: string }[]; tracksByAlbum: Map<string, number>; }) {
   return (
     <div
       className="grid gap-7"
@@ -157,11 +197,13 @@ function Grid({ albums, tracksByAlbum }: { albums: { _id: string; artistSlug: st
       {albums.map((a) => (
         <AlbumCard
           key={a._id}
+          albumId={a._id as never}
           artist={a.artistSlug}
           slug={a.slug}
           name={a.name}
           trackCount={tracksByAlbum.get(`${a.artistSlug}/${a.slug}`) ?? 0}
           coverKey={a.coverKey}
+          section={a.section}
         />
       ))}
     </div>
