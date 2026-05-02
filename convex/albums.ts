@@ -31,6 +31,7 @@ export const upsert = mutation({
     description: v.optional(v.string()),
     genre: v.optional(v.string()),
     coverKey: v.optional(v.string()),
+    section: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
