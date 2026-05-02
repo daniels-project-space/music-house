@@ -117,23 +117,23 @@ export function TrackRow({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       className={
-        "track-row group flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors relative " +
-        (isPlaying ? "now-playing-bar bg-purple/10" : "hover:bg-paper/[0.025]") +
+        "track-row group flex items-center gap-2.5 px-2.5 py-1.5 rounded transition-colors relative " +
+        (isPlaying ? "now-playing-bar bg-purple/10" : "hover:bg-paper/[0.03]") +
         (dragOver === "above" ? " drag-above" : "") +
         (dragOver === "below" ? " drag-below" : "")
       }
     >
-      <span className="drag-handle text-[0.7rem] select-none w-4 shrink-0 cursor-grab active:cursor-grabbing">⋮⋮</span>
-      <span className="font-mono text-[0.62rem] text-t4 w-6 text-right shrink-0 tabular-nums">{trackNum ?? "—"}</span>
+      <span className="drag-handle text-[0.62rem] select-none w-3 shrink-0 cursor-grab active:cursor-grabbing text-t4">⋮⋮</span>
+      <span className="font-mono text-[0.56rem] text-t4 w-5 text-right shrink-0 tabular-nums">{trackNum ?? "—"}</span>
       <button
         onClick={handlePlay}
         className={
-          "w-7 h-7 rounded-full grid place-items-center transition-all shrink-0 " +
+          "w-6 h-6 rounded-full grid place-items-center transition-all shrink-0 " +
           (isPlaying ? "bg-pink/15 text-pink" : "bg-purple/10 text-purple hover:bg-purple/25 hover:scale-110")
         }
         aria-label="Play"
       >
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
       </button>
       <div className="flex-1 min-w-0">
         {editing ? (
@@ -159,33 +159,33 @@ export function TrackRow({
           />
         ) : (
           <div
-            className={"text-[0.83rem] truncate font-display font-medium cursor-text " + (isPlaying ? "text-purple" : "text-paper")}
+            className={"text-[0.76rem] truncate font-display font-medium cursor-text leading-tight " + (isPlaying ? "text-purple" : "text-paper")}
             onDoubleClick={() => setEditing(true)}
             title="Double-click to rename"
           >
             {title}
           </div>
         )}
-        <div className="font-mono text-[0.56rem] text-t3 mt-0.5 truncate">
+        <div className="font-mono text-[0.5rem] text-t3 mt-0.5 truncate leading-tight">
           {artistSlug}
           {albumSlug ? " · " + albumSlug : ""}
-          <span className="ml-2 text-[0.5rem]" style={{ color: generator === "suno" ? "#ec4899" : "#8b5cf6" }}>◆ {generator}</span>
+          <span className="ml-1.5 text-[0.46rem]" style={{ color: generator === "suno" ? "#ec4899" : "#8b5cf6" }}>◆ {generator}</span>
         </div>
       </div>
-      <span className="font-mono text-[0.62rem] text-t3 w-10 text-right shrink-0 tabular-nums">{dur}</span>
+      <span className="font-mono text-[0.56rem] text-t3 w-9 text-right shrink-0 tabular-nums">{dur}</span>
       <button
         onClick={() => toggleHeart({ trackId })}
-        className={"w-7 h-7 grid place-items-center transition-all shrink-0 " + (hearted ? "text-pink animate-pulse-dot" : "text-t4 hover:text-pink")}
+        className={"w-6 h-6 grid place-items-center transition-all shrink-0 " + (hearted ? "text-pink animate-pulse-dot" : "text-t4 hover:text-pink")}
         aria-label={hearted ? "Unheart" : "Heart"}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill={hearted ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill={hearted ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
           <path d="M12 21s-7-4.35-7-10a4.5 4.5 0 0 1 8-2.83A4.5 4.5 0 0 1 19 11c0 5.65-7 10-7 10z" />
         </svg>
       </button>
       <div className="relative shrink-0" ref={menuRef}>
         <button
           onClick={() => setMenuOpen((m) => !m)}
-          className="track-menu-btn w-6 h-7 grid place-items-center text-t3 hover:text-paper transition-colors"
+          className="track-menu-btn w-5 h-6 grid place-items-center text-t3 hover:text-paper transition-colors"
           aria-label="More"
         >
           ⋮

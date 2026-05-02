@@ -60,10 +60,9 @@ export default function LibraryPage() {
   return (
     <PageShell>
       <PageHero
-        kicker="Library / 2026"
-        title="Library"
-        emphasis="catalog"
-        description="Generated tracks, organised into albums and sections. Drag rows to reorder. Click ⋮ for more."
+        kicker="Library"
+        title="Catalog"
+        description="Drag rows to reorder, drop tracks on albums to move, drag albums between sections."
         accent="purple"
         stats={[
           { label: "Artists", value: artists.length },
@@ -73,15 +72,15 @@ export default function LibraryPage() {
       />
 
       {stage && (
-        <div className="mb-10 flex items-center gap-3">
-          <span className="font-mono text-[0.6rem] uppercase tracking-[0.22em] text-paper-faint">Filter</span>
-          <span className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-pink px-2.5 py-1 rounded-full border border-pink/30 bg-pink/5">
+        <div className="my-4 flex items-center gap-3">
+          <span className="font-mono text-[0.55rem] uppercase tracking-[0.2em] text-paper-faint">Filter</span>
+          <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-pink px-2 py-0.5 rounded-full border border-pink/30 bg-pink/5">
             {stage}
           </span>
-          <a href="/library" className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-paper-faint hover:text-paper transition-colors">clear ×</a>
+          <a href="/library" className="font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint hover:text-paper transition-colors">clear ×</a>
         </div>
       )}
-      <div className="space-y-24">
+      <div className="pt-6 space-y-10">
         {SECTIONS.map((s) => {
           const list = bySection[s.key] ?? [];
           return (
@@ -173,15 +172,15 @@ function Section({
       className={hover ? "ring-2 ring-offset-4 ring-offset-bg rounded-2xl transition-all" : "transition-all"}
       style={hover ? { boxShadow: `0 0 0 2px ${accent}, 0 0 32px ${rule}` } : undefined}
     >
-      <div className="flex items-baseline justify-between mb-7 pb-3" style={{ borderBottom: `1px solid ${rule}` }}>
-        <div className="flex items-baseline gap-3">
-          <span style={{ color: accent }} className="text-[1.1rem]">{icon}</span>
-          <h2 className="font-display text-[1.65rem] font-semibold tracking-tight" style={{ color: accent }}>{label}</h2>
+      <div className="flex items-baseline justify-between mb-3 pb-2" style={{ borderBottom: `1px solid ${rule}` }}>
+        <div className="flex items-baseline gap-2.5">
+          <span style={{ color: accent }} className="text-[0.9rem] leading-none">{icon}</span>
+          <h2 className="font-display text-[0.95rem] font-bold tracking-tight leading-none" style={{ color: accent }}>{label}</h2>
           {isDropTarget && count === 0 && (
-            <span className="font-mono text-[0.55rem] uppercase tracking-[0.2em] text-paper-faint">drop here</span>
+            <span className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint">drop here</span>
           )}
         </div>
-        <span className="font-mono text-[0.6rem] uppercase tracking-[0.22em] text-paper-faint">{count} albums</span>
+        <span className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint">{count} alb</span>
       </div>
       {count > 0 && children}
     </section>
@@ -191,8 +190,8 @@ function Section({
 function Grid({ albums, tracksByAlbum }: { albums: { _id: string; artistSlug: string; slug: string; name: string; coverKey?: string; section?: string }[]; tracksByAlbum: Map<string, number>; }) {
   return (
     <div
-      className="grid gap-7"
-      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}
+      className="grid"
+      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "1rem" }}
     >
       {albums.map((a) => (
         <AlbumCard
@@ -239,14 +238,14 @@ function UnsortedTracks({
 
   return (
     <section>
-      <div className="flex items-baseline justify-between mb-7 pb-3" style={{ borderBottom: "1px solid rgba(251,191,36,0.35)" }}>
-        <div className="flex items-baseline gap-3">
-          <span className="text-[1.1rem] text-amber">◯</span>
-          <h2 className="font-display text-[1.65rem] font-semibold tracking-tight text-amber">Unsorted</h2>
+      <div className="flex items-baseline justify-between mb-3 pb-2" style={{ borderBottom: "1px solid rgba(251,191,36,0.35)" }}>
+        <div className="flex items-baseline gap-2.5">
+          <span className="text-[0.9rem] text-amber leading-none">◯</span>
+          <h2 className="font-display text-[0.95rem] font-bold tracking-tight text-amber leading-none">Unsorted</h2>
         </div>
-        <span className="font-mono text-[0.6rem] uppercase tracking-[0.22em] text-paper-faint">{tracks.length} tracks</span>
+        <span className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint">{tracks.length} trk</span>
       </div>
-      <div className="rounded-xl border border-brd bg-card/50 backdrop-blur p-3 space-y-0.5">
+      <div className="rounded-md border border-brd bg-card/50 backdrop-blur p-1.5">
         {tracks.map((t, i) => (
           <TrackRow
             key={t._id}

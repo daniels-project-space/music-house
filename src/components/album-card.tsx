@@ -1,6 +1,9 @@
 "use client";
 import Link from "next/link";
+import { useState } from "react";
+import { useMutation } from "convex/react";
 import { useUrlCache } from "./url-cache-provider";
+import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
 type Props = {
@@ -16,6 +19,8 @@ type Props = {
 export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, section }: Props) {
   const { get } = useUrlCache();
   const coverUrl = coverKey ? get(coverKey) : undefined;
+  const moveTrack = useMutation(api.tracks.move);
+  const [trackOver, setTrackOver] = useState(false);
 
   const onDragStart = (e: React.DragEvent) => {
     if (!albumId) return;
@@ -23,13 +28,40 @@ export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, s
     e.dataTransfer.setData("application/x-mh-album", JSON.stringify({ albumId, section }));
   };
 
+  const onDragOver = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes("application/x-mh-track")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      setTrackOver(true);
+    }
+  };
+  const onDragLeave = () => setTrackOver(false);
+  const onDrop = async (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes("application/x-mh-track")) return;
+    e.preventDefault();
+    setTrackOver(false);
+    const raw = e.dataTransfer.getData("application/x-mh-track");
+    if (!raw) return;
+    try {
+      const data = JSON.parse(raw) as { trackId: Id<"tracks">; artistSlug: string; albumSlug?: string };
+      if (data.artistSlug === artist && data.albumSlug === slug) return;
+      await moveTrack({ id: data.trackId, targetArtistSlug: artist, targetAlbumSlug: slug });
+    } catch {}
+  };
+
   return (
     <Link
       href={`/library/${artist}/${slug}`}
       draggable={!!albumId}
       onDragStart={onDragStart}
-      className="group block rounded-xl overflow-hidden bg-card border card-hover"
-      style={{ borderColor: "var(--color-brd)" }}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      className={
+        "group block rounded-lg overflow-hidden bg-card border card-hover relative " +
+        (trackOver ? "ring-2 ring-pink/60 scale-[1.02]" : "")
+      }
+      style={{ borderColor: trackOver ? "rgba(236,72,153,0.6)" : "var(--color-brd)" }}
     >
       <div className="relative aspect-square">
         {coverUrl ? (
@@ -38,29 +70,42 @@ export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, s
             src={coverUrl}
             alt={name}
             loading="lazy"
-            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-[#1e293b] via-[#0f172a] to-[#0a0c12] grid place-items-center text-5xl text-t4/60 animate-breathe">
+          <div className="w-full h-full bg-gradient-to-br from-[#1e293b] via-[#0f172a] to-[#0a0c12] grid place-items-center text-4xl text-t4/60">
             ♪
           </div>
         )}
         <div
           className="absolute inset-0 pointer-events-none"
-          style={{ background: "linear-gradient(180deg, transparent 50%, rgba(5,6,8,0.85) 100%)" }}
+          style={{ background: "linear-gradient(180deg, transparent 55%, rgba(5,6,8,0.85) 100%)" }}
         />
+        <div className="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+          <div
+            className="w-11 h-11 rounded-full grid place-items-center transform scale-90 group-hover:scale-100 transition-transform duration-200"
+            style={{ background: "linear-gradient(135deg, #ec4899, #8b5cf6)", boxShadow: "0 4px 20px rgba(236,72,153,0.4)" }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z" /></svg>
+          </div>
+        </div>
         <span
-          className="absolute bottom-2.5 right-2.5 font-mono text-[0.55rem] px-2 py-0.5 rounded backdrop-blur"
+          className="absolute bottom-1.5 right-1.5 font-mono text-[0.5rem] px-1.5 py-[1px] rounded backdrop-blur tabular-nums"
           style={{ background: "rgba(5,6,8,0.7)", color: "#94a3b8" }}
         >
           {trackCount} trk
         </span>
+        {trackOver && (
+          <div className="absolute inset-0 grid place-items-center pointer-events-none" style={{ background: "rgba(236,72,153,0.18)" }}>
+            <span className="font-mono text-[0.6rem] uppercase tracking-[0.2em] text-pink font-bold">drop</span>
+          </div>
+        )}
       </div>
-      <div className="px-3.5 py-3">
-        <h3 className="font-display text-[0.95rem] font-semibold tracking-tight truncate text-paper">
+      <div className="px-2.5 py-2">
+        <h3 className="font-display text-[0.82rem] font-semibold tracking-tight truncate text-paper leading-tight">
           {name}
         </h3>
-        <p className="mt-0.5 font-mono text-[0.6rem] uppercase tracking-[0.16em] text-amber/85 truncate font-semibold">
+        <p className="mt-0.5 font-mono text-[0.55rem] uppercase tracking-[0.1em] text-amber/80 truncate">
           {artist}
         </p>
       </div>

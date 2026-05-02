@@ -5,6 +5,7 @@ import { PlayerProvider } from "@/components/player-context";
 import { TopBar } from "@/components/top-bar";
 import { PipelineStrip } from "@/components/pipeline-strip";
 import { UrlCacheProvider } from "@/components/url-cache-provider";
+import { GlobalUrlPrefetch } from "@/components/global-url-prefetch";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ConvexClientProvider>
           <UrlCacheProvider>
             <PlayerProvider>
+              <GlobalUrlPrefetch />
               <TopBar />
               <PipelineStrip />
               {children}
