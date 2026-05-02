@@ -46,3 +46,22 @@ export const upsert = mutation({
     return ctx.db.insert("albums", data);
   },
 });
+
+export const rename = mutation({
+  args: { id: v.id("albums"), name: v.string() },
+  handler: async (ctx, { id, name }) => {
+    const n = name.trim();
+    if (!n) throw new Error("name required");
+    await ctx.db.patch(id, { name: n });
+  },
+});
+
+export const setSection = mutation({
+  args: { id: v.id("albums"), section: v.optional(v.string()) },
+  handler: async (ctx, { id, section }) => ctx.db.patch(id, { section }),
+});
+
+export const remove = mutation({
+  args: { id: v.id("albums") },
+  handler: async (ctx, { id }) => ctx.db.delete(id),
+});

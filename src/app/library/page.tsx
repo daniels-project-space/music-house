@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useQuery } from "convex/react";
+import { useSearchParams } from "next/navigation";
 import { api } from "../../../convex/_generated/api";
 import { AlbumCard } from "@/components/album-card";
 import { PageHero, PageShell } from "@/components/page-hero";
-import { useUrlCache, useResolvedUrls } from "@/components/url-cache-provider";
+import { useResolvedUrls } from "@/components/url-cache-provider";
 import { TrackRow, useHeartedSet } from "@/components/track-row";
 import type { PlayerTrack } from "@/components/player-context";
 
@@ -20,6 +21,8 @@ export default function LibraryPage() {
   const tracks = useQuery(api.tracks.list, {}) ?? [];
   const artists = useQuery(api.artists.list, {}) ?? [];
   const hearted = useHeartedSet();
+  const sp = useSearchParams();
+  const stage = sp?.get("stage");
 
   // Bulk-prefetch every album cover in one shot (cached). Player URLs not needed here.
   const coverKeys = useMemo(() => albums.map((a) => a.coverKey).filter((k): k is string => !!k), [albums]);
@@ -46,10 +49,13 @@ export default function LibraryPage() {
   }
 
   // Unsorted FLAT TRACKS — tracks whose album is _unsorted/_singles or has no albumSlug
-  const unsortedTracks = useMemo(
-    () => tracks.filter((t) => !t.albumSlug || t.albumSlug === "_singles" || t.albumSlug === "_unsorted").slice(0, 80),
-    [tracks],
-  );
+  const unsortedTracks = useMemo(() => {
+    let list = tracks.filter((t) => !t.albumSlug || t.albumSlug === "_singles" || t.albumSlug === "_unsorted");
+    if (stage === "ready") list = list.filter((t) => !t.distributed && !t.archivedAt);
+    if (stage === "distributed") list = list.filter((t) => t.distributed);
+    if (stage === "mixing") list = list.filter((t) => !t.distributed && !t.archivedAt && (t.rating ?? 0) >= 4);
+    return list.slice(0, 80);
+  }, [tracks, stage]);
 
   return (
     <PageShell>
@@ -66,6 +72,15 @@ export default function LibraryPage() {
         ]}
       />
 
+      {stage && (
+        <div className="mb-10 flex items-center gap-3">
+          <span className="font-mono text-[0.6rem] uppercase tracking-[0.22em] text-paper-faint">Filter</span>
+          <span className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-pink px-2.5 py-1 rounded-full border border-pink/30 bg-pink/5">
+            {stage}
+          </span>
+          <a href="/library" className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-paper-faint hover:text-paper transition-colors">clear ×</a>
+        </div>
+      )}
       <div className="space-y-24">
         {SECTIONS.map((s) => {
           const list = bySection[s.key] ?? [];

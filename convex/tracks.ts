@@ -115,3 +115,22 @@ export const reorder = mutation({
     }
   },
 });
+export const rename = mutation({
+  args: { id: v.id("tracks"), title: v.string() },
+  handler: async (ctx, { id, title }) => {
+    const t = title.trim();
+    if (!t) throw new Error("title required");
+    await ctx.db.patch(id, { title: t });
+  },
+});
+
+export const setDistributed = mutation({
+  args: { id: v.id("tracks"), distributed: v.boolean() },
+  handler: async (ctx, { id, distributed }) =>
+    ctx.db.patch(id, { distributed, distributedAt: distributed ? Date.now() : undefined }),
+});
+
+export const remove = mutation({
+  args: { id: v.id("tracks") },
+  handler: async (ctx, { id }) => ctx.db.delete(id),
+});

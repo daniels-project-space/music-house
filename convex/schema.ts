@@ -44,6 +44,7 @@ export default defineSchema({
     notes: v.optional(v.string()),
     rating: v.optional(v.number()),
     distributed: v.boolean(),
+    distributedAt: v.optional(v.number()),
     createdAt: v.number(),
     archivedAt: v.optional(v.number()),
   })

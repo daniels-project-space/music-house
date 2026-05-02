@@ -42,6 +42,13 @@ export function TrackRow({
   const archive = useMutation(api.tracks.archive);
   const reorder = useMutation(api.tracks.reorder);
   const move = useMutation(api.tracks.move);
+  const rename = useMutation(api.tracks.rename);
+  const setDistributed = useMutation(api.tracks.setDistributed);
+  const removeTrack = useMutation(api.tracks.remove);
+  const [editing, setEditing] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(title);
+  useEffect(() => setDraftTitle(title), [title]);
+  const titleRef = useRef<HTMLInputElement | null>(null);
   const { play, current } = usePlayer();
   const { ensure, get } = useUrlCache();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -129,9 +136,36 @@ export function TrackRow({
         <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
       </button>
       <div className="flex-1 min-w-0">
-        <div className={"text-[0.83rem] truncate font-display font-medium " + (isPlaying ? "text-purple" : "text-paper")}>
-          {title}
-        </div>
+        {editing ? (
+          <input
+            ref={titleRef}
+            value={draftTitle}
+            onChange={(e) => setDraftTitle(e.target.value)}
+            onBlur={async () => {
+              const t = draftTitle.trim();
+              if (t && t !== title) {
+                try { await rename({ id: trackId, title: t }); } catch { setDraftTitle(title); }
+              } else {
+                setDraftTitle(title);
+              }
+              setEditing(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+              if (e.key === "Escape") { setDraftTitle(title); setEditing(false); }
+            }}
+            autoFocus
+            className="w-full bg-transparent outline-none font-display text-[0.83rem] font-medium text-paper border-b border-pink/40 pb-0.5"
+          />
+        ) : (
+          <div
+            className={"text-[0.83rem] truncate font-display font-medium cursor-text " + (isPlaying ? "text-purple" : "text-paper")}
+            onDoubleClick={() => setEditing(true)}
+            title="Double-click to rename"
+          >
+            {title}
+          </div>
+        )}
         <div className="font-mono text-[0.56rem] text-t3 mt-0.5 truncate">
           {artistSlug}
           {albumSlug ? " · " + albumSlug : ""}
@@ -158,13 +192,20 @@ export function TrackRow({
         </button>
         {menuOpen && (
           <div className="absolute right-0 top-9 z-30 w-40 rounded-md border bg-elevated shadow-2xl py-1 animate-fi" style={{ borderColor: "var(--color-brd)" }}>
+            <Item icon="✎" label="Rename" onClick={() => { setMenuOpen(false); setEditing(true); }} />
             <Item icon="♪" label="Lyrics" onClick={() => { setMenuOpen(false); onShowLyrics?.(); }} />
-            <Item icon="📁" label="Move" onClick={() => setMenuOpen(false)} />
-            <Item icon="▶" label="Add to playlist" onClick={() => setMenuOpen(false)} />
-            <Item icon="📡" label="Distribute" onClick={() => setMenuOpen(false)} />
+            <Item icon="📡" label="Distribute" onClick={() => { setDistributed({ id: trackId, distributed: true }); setMenuOpen(false); }} />
             <Item icon="📦" label="Archive" onClick={() => { archive({ id: trackId }); setMenuOpen(false); }} />
             <div className="my-1 mx-2 h-px bg-brd" />
-            <Item icon="🗑" label="Delete" danger onClick={() => setMenuOpen(false)} />
+            <Item
+              icon="🗑"
+              label="Delete"
+              danger
+              onClick={() => {
+                if (confirm(`Delete "${title}" permanently?`)) removeTrack({ id: trackId });
+                setMenuOpen(false);
+              }}
+            />
           </div>
         )}
       </div>
