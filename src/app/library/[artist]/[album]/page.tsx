@@ -1,11 +1,12 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
-import { use, useEffect, useState } from "react";
+import { use, useMemo, useState } from "react";
 import { TrackRow, useHeartedSet } from "@/components/track-row";
 import { KaraokeLyrics } from "@/components/karaoke-lyrics";
 import { usePlayer, type PlayerTrack } from "@/components/player-context";
+import { useResolvedUrls } from "@/components/url-cache-provider";
 
 export default function AlbumPage({ params }: { params: Promise<{ artist: string; album: string }> }) {
   const { artist, album } = use(params);
@@ -13,30 +14,20 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
   const tracks = useQuery(api.tracks.list, { artistSlug: artist, albumSlug: album });
   const hearted = useHeartedSet();
   const { play, current } = usePlayer();
+  const renameAlbum = useMutation(api.albums.rename);
 
-  const [coverUrl, setCoverUrl] = useState<string | null>(null);
-  const [audioUrls, setAudioUrls] = useState<Record<string, string>>({});
+  const allKeys = useMemo(() => {
+    const k: string[] = [];
+    if (albumRow?.coverKey) k.push(albumRow.coverKey);
+    if (tracks) for (const t of tracks) k.push(t.audioKey);
+    return k;
+  }, [albumRow?.coverKey, tracks]);
+  const urls = useResolvedUrls(allKeys);
+  const coverUrl = albumRow?.coverKey ? urls[albumRow.coverKey] ?? null : null;
+
   const [lyricsTrackId, setLyricsTrackId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (albumRow?.coverKey) {
-      fetch(`/api/audio?key=${encodeURIComponent(albumRow.coverKey)}`)
-        .then((r) => r.json())
-        .then((j) => setCoverUrl(j.url ?? null))
-        .catch(() => {});
-    }
-  }, [albumRow?.coverKey]);
-
-  useEffect(() => {
-    if (!tracks) return;
-    Promise.all(
-      tracks.map(async (t) => {
-        const r = await fetch(`/api/audio?key=${encodeURIComponent(t.audioKey)}`);
-        const j = await r.json();
-        return [t._id, j.url] as const;
-      }),
-    ).then((rs) => setAudioUrls(Object.fromEntries(rs)));
-  }, [tracks]);
+  const [editingName, setEditingName] = useState(false);
+  const [draftName, setDraftName] = useState("");
 
   if (!tracks || !albumRow) {
     return <main className="max-w-[1600px] mx-auto px-8 lg:px-12 py-16 text-paper-dim">loading...</main>;
@@ -49,7 +40,7 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
       title: t.title,
       artist,
       album,
-      audioUrl: audioUrls[t._id] ?? "",
+      audioUrl: urls[t.audioKey] ?? "",
       coverUrl: coverUrl ?? undefined,
     }))
     .filter((t) => t.audioUrl);
@@ -101,9 +92,33 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
 
           <div>
             <p className="label-mono-amber">{albumRow.section ?? "—"}</p>
-            <h1 className="mt-1 font-display text-2xl xl:text-4xl font-extrabold leading-[1.05] tracking-tight text-t1">
-              {albumRow.name}
-            </h1>
+            {editingName ? (
+              <input
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                onBlur={async () => {
+                  const n = draftName.trim();
+                  if (n && n !== albumRow.name) {
+                    try { await renameAlbum({ id: albumRow._id, name: n }); } catch {}
+                  }
+                  setEditingName(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+                  if (e.key === "Escape") setEditingName(false);
+                }}
+                autoFocus
+                className="mt-1 w-full bg-transparent outline-none font-display text-2xl xl:text-4xl font-extrabold leading-[1.05] tracking-tight text-t1 border-b border-pink/40"
+              />
+            ) : (
+              <h1
+                className="mt-1 font-display text-2xl xl:text-4xl font-extrabold leading-[1.05] tracking-tight text-t1 cursor-text"
+                onDoubleClick={() => { setDraftName(albumRow.name); setEditingName(true); }}
+                title="Double-click to rename"
+              >
+                {albumRow.name}
+              </h1>
+            )}
             <p className="mt-2 font-mono text-[0.62rem] text-t3 uppercase tracking-[0.14em]">
               {artist} · {sorted.length} tracks · {durMin} min
             </p>
