@@ -11,7 +11,7 @@ type Props = {
   isSuno?: boolean;
 };
 
-export function AlbumCard({ artist, slug, name, trackCount, coverKey, isSuno }: Props) {
+export function AlbumCard({ artist, slug, name, trackCount, coverKey }: Props) {
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!coverKey) return;
@@ -24,23 +24,46 @@ export function AlbumCard({ artist, slug, name, trackCount, coverKey, isSuno }: 
   return (
     <Link
       href={`/library/${artist}/${slug}`}
-      className={`block bg-card border ${isSuno ? "border-pink/20" : "border-brd"} rounded-[var(--radius-default)] overflow-hidden card-hover`}
+      className="group block rounded-xl overflow-hidden bg-card border card-hover"
+      style={{ borderColor: "var(--color-brd)" }}
     >
-      <div className="relative aspect-square bg-gradient-to-br from-[#1e293b] to-[#0f172a] grid place-items-center">
+      <div className="relative aspect-square">
         {coverUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={coverUrl} alt={name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+          <img
+            src={coverUrl}
+            alt={name}
+            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+          />
         ) : (
-          <span className="text-4xl text-t4">♪</span>
+          <div className="w-full h-full bg-gradient-to-br from-[#1e293b] via-[#0f172a] to-[#0a0c12] grid place-items-center text-5xl text-t4/60">
+            ♪
+          </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/70" />
-        <span className="absolute bottom-2 right-2 font-mono text-[0.55rem] px-1.5 py-0.5 rounded bg-black/70 text-t2 backdrop-blur">
+
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "linear-gradient(180deg, transparent 50%, rgba(5,6,8,0.85) 100%)",
+          }}
+        />
+
+        <span
+          className="absolute bottom-2.5 right-2.5 font-mono text-[0.55rem] px-2 py-0.5 rounded backdrop-blur"
+          style={{ background: "rgba(5,6,8,0.6)", color: "#94a3b8" }}
+        >
           {trackCount} trk
         </span>
       </div>
-      <div className="p-3">
-        <h3 className="text-[0.85rem] font-bold truncate">{name}</h3>
-        <p className="font-mono text-[0.58rem] text-t3 mt-0.5 truncate">{artist}</p>
+
+      <div className="px-3.5 py-3">
+        <h3 className="font-display text-[0.92rem] font-semibold tracking-tight truncate text-t1">
+          {name}
+        </h3>
+        <p className="mt-0.5 font-mono text-[0.55rem] uppercase tracking-[0.14em] text-t3 truncate">
+          {artist}
+        </p>
       </div>
     </Link>
   );

@@ -1,0 +1,199 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
+import { usePlayer, type PlayerTrack } from "./player-context";
+
+type TrackRowProps = {
+  trackId: Id<"tracks">;
+  trackNum?: number;
+  title: string;
+  artistSlug: string;
+  albumSlug?: string;
+  duration?: number;
+  generator: "suno" | "mureka" | "import";
+  audioKey: string;
+  hearted: boolean;
+  onShowLyrics?: () => void;
+  queue?: PlayerTrack[];
+};
+
+export function TrackRow({
+  trackId,
+  trackNum,
+  title,
+  artistSlug,
+  albumSlug,
+  duration,
+  generator,
+  audioKey,
+  hearted,
+  onShowLyrics,
+  queue,
+}: TrackRowProps) {
+  const toggleHeart = useMutation(api.hearts.toggle);
+  const archive = useMutation(api.tracks.archive);
+  const { play, current } = usePlayer();
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/audio?key=${encodeURIComponent(audioKey)}`)
+      .then((r) => r.json())
+      .then((j) => setAudioUrl(j.url ?? null))
+      .catch(() => {});
+  }, [audioKey]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [menuOpen]);
+
+  const isPlaying = current?.id === trackId;
+  const mins = duration ? Math.floor(duration / 60) : 0;
+  const secs = duration ? Math.floor(duration % 60) : 0;
+  const dur = duration ? `${mins}:${secs.toString().padStart(2, "0")}` : "—";
+
+  const handlePlay = () => {
+    if (!audioUrl) return;
+    play(
+      { id: trackId, title, artist: artistSlug, album: albumSlug, audioUrl },
+      queue,
+    );
+  };
+
+  return (
+    <div
+      className={
+        "track-row group flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors relative " +
+        (isPlaying ? "now-playing-bar bg-purple/10" : "hover:bg-paper/[0.025]")
+      }
+    >
+      <span className="drag-handle text-xs select-none w-4 shrink-0">⋮⋮</span>
+      <span className="font-mono text-[0.62rem] text-t4 w-6 text-right shrink-0 tabular-nums">
+        {trackNum ?? "—"}
+      </span>
+      <button
+        onClick={handlePlay}
+        disabled={!audioUrl}
+        className={
+          "w-7 h-7 rounded-full grid place-items-center transition-all shrink-0 " +
+          (isPlaying
+            ? "bg-pink/15 text-pink"
+            : "bg-purple/10 text-purple hover:bg-purple/25 hover:scale-110") +
+          " disabled:opacity-25"
+        }
+        aria-label="Play"
+      >
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M8 5v14l11-7z" />
+        </svg>
+      </button>
+      <div className="flex-1 min-w-0">
+        <div
+          className={
+            "text-[0.82rem] truncate font-display font-medium " +
+            (isPlaying ? "text-purple" : "text-t1")
+          }
+        >
+          {title}
+        </div>
+        <div className="font-mono text-[0.56rem] text-t3 mt-0.5 truncate">
+          {artistSlug}
+          {albumSlug ? " · " + albumSlug : ""}
+          <span className="ml-2 text-[0.5rem]" style={{ color: generator === "suno" ? "#ec4899" : "#8b5cf6" }}>
+            ◆ {generator}
+          </span>
+        </div>
+      </div>
+      <span className="font-mono text-[0.62rem] text-t3 w-10 text-right shrink-0 tabular-nums">{dur}</span>
+      <button
+        onClick={() => toggleHeart({ trackId })}
+        className={
+          "w-7 h-7 grid place-items-center transition-all shrink-0 " +
+          (hearted ? "text-pink animate-pulse-dot" : "text-t4 hover:text-pink")
+        }
+        aria-label={hearted ? "Unheart" : "Heart"}
+        title={hearted ? "Unheart" : "Heart"}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill={hearted ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+          <path d="M12 21s-7-4.35-7-10a4.5 4.5 0 0 1 8-2.83A4.5 4.5 0 0 1 19 11c0 5.65-7 10-7 10z" />
+        </svg>
+      </button>
+      <div className="relative shrink-0" ref={menuRef}>
+        <button
+          onClick={() => setMenuOpen((m) => !m)}
+          className="track-menu-btn w-6 h-7 grid place-items-center text-t3 hover:text-t1 transition-colors"
+          aria-label="More"
+        >
+          ⋮
+        </button>
+        {menuOpen && (
+          <div
+            className="absolute right-0 top-9 z-30 w-40 rounded-md border bg-elevated shadow-2xl py-1 animate-fi"
+            style={{ borderColor: "var(--color-brd)" }}
+          >
+            <MenuItem
+              icon="♪"
+              label="Lyrics"
+              onClick={() => {
+                setMenuOpen(false);
+                onShowLyrics?.();
+              }}
+            />
+            <MenuItem icon="📁" label="Move" onClick={() => setMenuOpen(false)} />
+            <MenuItem icon="▶" label="Add to playlist" onClick={() => setMenuOpen(false)} />
+            <MenuItem icon="📡" label="Distribute" onClick={() => setMenuOpen(false)} />
+            <MenuItem
+              icon="📦"
+              label="Archive"
+              onClick={() => {
+                archive({ id: trackId });
+                setMenuOpen(false);
+              }}
+            />
+            <div className="my-1 mx-2 h-px bg-brd" />
+            <MenuItem icon="🗑" label="Delete" danger onClick={() => setMenuOpen(false)} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MenuItem({
+  icon,
+  label,
+  onClick,
+  danger,
+}: {
+  icon: string;
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={
+        "w-full px-3 py-1.5 text-[0.7rem] text-left flex items-center gap-2.5 transition-colors " +
+        (danger ? "text-red hover:bg-red/[0.06]" : "text-t1 hover:bg-purple/[0.08] hover:text-purple")
+      }
+    >
+      <span className="text-[0.75rem] w-4 text-center">{icon}</span>
+      <span className="font-display">{label}</span>
+    </button>
+  );
+}
+
+export function useHeartedSet(): Set<string> {
+  const list = useQuery(api.hearts.list, {});
+  return new Set((list ?? []).map((h) => h.trackId));
+}

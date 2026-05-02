@@ -1,62 +1,227 @@
 "use client";
-import { useQuery, useMutation } from "convex/react";
+
+import { useQuery } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
 import { use, useEffect, useState } from "react";
-import { usePlayer } from "@/components/player-context";
+import { TrackRow, useHeartedSet } from "@/components/track-row";
+import { KaraokeLyrics } from "@/components/karaoke-lyrics";
+import { usePlayer, type PlayerTrack } from "@/components/player-context";
 
 export default function AlbumPage({ params }: { params: Promise<{ artist: string; album: string }> }) {
   const { artist, album } = use(params);
   const albumRow = useQuery(api.albums.getOne, { artistSlug: artist, slug: album });
   const tracks = useQuery(api.tracks.list, { artistSlug: artist, albumSlug: album });
-  const heartList = useQuery(api.hearts.list, {});
-  const toggleHeart = useMutation(api.hearts.toggle);
-  const { play } = usePlayer();
-  const [urls, setUrls] = useState<Record<string, string>>({});
-  const heartedSet = new Set((heartList ?? []).map((h) => h.trackId));
+  const hearted = useHeartedSet();
+  const { play, current } = usePlayer();
+
+  const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  const [audioUrls, setAudioUrls] = useState<Record<string, string>>({});
+  const [lyricsTrackId, setLyricsTrackId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (albumRow?.coverKey) {
+      fetch(`/api/audio?key=${encodeURIComponent(albumRow.coverKey)}`)
+        .then((r) => r.json())
+        .then((j) => setCoverUrl(j.url ?? null))
+        .catch(() => {});
+    }
+  }, [albumRow?.coverKey]);
 
   useEffect(() => {
     if (!tracks) return;
     Promise.all(
-      tracks.map(async (t) => [t._id, await fetch(`/api/audio?key=${encodeURIComponent(t.audioKey)}`).then((r) => r.json()).then((j) => j.url)] as const),
-    ).then((rs) => setUrls(Object.fromEntries(rs)));
+      tracks.map(async (t) => {
+        const r = await fetch(`/api/audio?key=${encodeURIComponent(t.audioKey)}`);
+        const j = await r.json();
+        return [t._id, j.url] as const;
+      }),
+    ).then((rs) => setAudioUrls(Object.fromEntries(rs)));
   }, [tracks]);
 
-  const queue = (tracks ?? []).map((t) => ({
-    id: t._id,
-    title: t.title,
-    artist,
-    album,
-    audioUrl: urls[t._id] ?? "",
-  })).filter((x) => x.audioUrl);
+  if (!tracks || !albumRow) {
+    return <main className="max-w-[1600px] mx-auto px-8 lg:px-12 py-16 text-paper-dim">loading...</main>;
+  }
+
+  const sorted = [...tracks].sort((a, b) => (a.trackNum ?? 0) - (b.trackNum ?? 0));
+  const queue: PlayerTrack[] = sorted
+    .map((t) => ({
+      id: t._id,
+      title: t.title,
+      artist,
+      album,
+      audioUrl: audioUrls[t._id] ?? "",
+      coverUrl: coverUrl ?? undefined,
+    }))
+    .filter((t) => t.audioUrl);
+
+  const playAll = () => {
+    if (queue.length) play(queue[0], queue);
+  };
+
+  const shuffle = () => {
+    if (!queue.length) return;
+    const shuffled = [...queue].sort(() => Math.random() - 0.5);
+    play(shuffled[0], shuffled);
+  };
+
+  const totalDuration = sorted.reduce((s, t) => s + (t.duration ?? 0), 0);
+  const durMin = Math.round(totalDuration / 60);
+
+  const lyricsTrack = lyricsTrackId
+    ? sorted.find((t) => t._id === lyricsTrackId)
+    : current
+      ? sorted.find((t) => t._id === current.id)
+      : null;
 
   return (
-    <main className="max-w-[1440px] mx-auto px-8 lg:px-14 py-12">
-      <a href={`/library/${artist}`} className="font-mono text-paper-dim text-sm hover:text-paper">← {artist}</a>
-      <h1 className="font-display text-4xl text-paper mt-2">{albumRow?.name ?? album}</h1>
-      <p className="text-paper-dim text-sm mt-2 font-mono">{tracks?.length ?? 0} tracks</p>
+    <main className="max-w-[1600px] mx-auto px-8 lg:px-12 py-10 animate-fi">
+      <a
+        href={`/library/${artist}`}
+        className="inline-flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.22em] text-t3 hover:text-amber transition-colors mb-8"
+      >
+        ← {artist}
+      </a>
 
-      <ol className="mt-12 space-y-1">
-        {(tracks ?? []).sort((a, b) => (a.trackNum ?? 0) - (b.trackNum ?? 0)).map((t) => (
-          <li key={t._id} className="group flex items-center gap-4 px-4 py-2 rounded hover:bg-paper/5">
-            <span className="text-paper-dim font-mono text-xs w-6">{t.trackNum ?? "-"}</span>
-            <button
-              disabled={!urls[t._id]}
-              onClick={() => urls[t._id] && play({ id: t._id, title: t.title, artist, album, audioUrl: urls[t._id] }, queue)}
-              className="text-amber/60 hover:text-amber disabled:opacity-30 font-mono text-sm w-6"
-            >
-              ▶
-            </button>
-            <a href={`/track/${t._id}`} className="flex-1 text-paper hover:text-amber">{t.title}</a>
-            <span className="text-paper-dim font-mono text-xs">{Math.round((t.duration ?? 0) / 60)}m</span>
-            <button
-              onClick={() => toggleHeart({ trackId: t._id })}
-              className={`font-mono text-sm w-6 ${heartedSet.has(t._id) ? "text-amber" : "text-paper-dim hover:text-paper"}`}
-            >
-              ♥
-            </button>
-          </li>
-        ))}
-      </ol>
+      <div className="grid grid-cols-12 gap-10">
+        {/* LEFT — cover + actions */}
+        <aside className="col-span-12 lg:col-span-4 xl:col-span-3 space-y-6">
+          <div
+            className={
+              "relative aspect-square rounded-xl overflow-hidden bg-card border border-brd " +
+              (current && queue.find((q) => q.id === current.id) ? "animate-cover-pulse" : "")
+            }
+          >
+            {coverUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={coverUrl} alt={albumRow.name} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full grid place-items-center text-6xl text-t4">♪</div>
+            )}
+          </div>
+
+          <div>
+            <p className="label-mono-amber">{albumRow.section ?? "—"}</p>
+            <h1 className="mt-1 font-display text-3xl xl:text-4xl font-extrabold leading-[1.05] tracking-tight text-t1">
+              {albumRow.name}
+            </h1>
+            <p className="mt-2 font-mono text-[0.62rem] text-t3 uppercase tracking-[0.14em]">
+              {artist} · {sorted.length} tracks · {durMin} min
+            </p>
+            {albumRow.description && (
+              <p className="mt-3 text-[0.85rem] text-t2 leading-relaxed">{albumRow.description}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <ActionButton color="purple" onClick={playAll} disabled={!queue.length}>
+              ▶ Play All
+            </ActionButton>
+            <ActionButton onClick={shuffle} disabled={!queue.length}>
+              ⤮ Shuffle
+            </ActionButton>
+            <div className="grid grid-cols-2 gap-2">
+              <ActionButton
+                color="cyan"
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.href);
+                }}
+              >
+                🔗 Share
+              </ActionButton>
+              <ActionButton color="green">Complete</ActionButton>
+            </div>
+            <ActionButton color="amber">+ Distribute</ActionButton>
+          </div>
+        </aside>
+
+        {/* CENTER — track list */}
+        <section className="col-span-12 lg:col-span-5 xl:col-span-6">
+          <div className="flex items-center justify-between mb-4">
+            <p className="label-mono">Tracks</p>
+            <p className="label-mono">{sorted.length}</p>
+          </div>
+          <ol className="space-y-0.5">
+            {sorted.map((t) => (
+              <TrackRow
+                key={t._id}
+                trackId={t._id}
+                trackNum={t.trackNum}
+                title={t.title}
+                artistSlug={t.artistSlug}
+                albumSlug={t.albumSlug}
+                duration={t.duration}
+                generator={t.generator}
+                audioKey={t.audioKey}
+                hearted={hearted.has(t._id)}
+                onShowLyrics={() => setLyricsTrackId(t._id)}
+                queue={queue}
+              />
+            ))}
+          </ol>
+        </section>
+
+        {/* RIGHT — sticky lyrics karaoke */}
+        <aside className="col-span-12 lg:col-span-3 xl:col-span-3">
+          <div
+            className="sticky top-24 rounded-xl border border-brd bg-card/60 backdrop-blur p-5 min-h-[420px]"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <p className="label-mono">Lyrics</p>
+              {lyricsTrack && (
+                <button
+                  onClick={() => setLyricsTrackId(null)}
+                  className="font-mono text-[0.55rem] uppercase tracking-[0.18em] text-t3 hover:text-t1"
+                >
+                  clear
+                </button>
+              )}
+            </div>
+            {lyricsTrack ? (
+              <KaraokeLyrics
+                title={lyricsTrack.title}
+                lyrics={lyricsTrack.lyrics ?? []}
+                trackId={lyricsTrack._id}
+              />
+            ) : (
+              <div className="grid place-items-center h-[340px] text-center">
+                <p className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-t4 leading-relaxed max-w-[180px]">
+                  Click ⋮ on any track and pick Lyrics. Or play one — it follows.
+                </p>
+              </div>
+            )}
+          </div>
+        </aside>
+      </div>
     </main>
+  );
+}
+
+function ActionButton({
+  children,
+  color,
+  onClick,
+  disabled,
+}: {
+  children: React.ReactNode;
+  color?: "purple" | "cyan" | "green" | "amber";
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  const colors = {
+    purple: { border: "rgba(139,92,246,0.4)", text: "#8b5cf6", bg: "rgba(139,92,246,0.06)" },
+    cyan: { border: "rgba(6,182,212,0.4)", text: "#06b6d4", bg: "rgba(6,182,212,0.06)" },
+    green: { border: "rgba(52,211,153,0.4)", text: "#34d399", bg: "rgba(52,211,153,0.06)" },
+    amber: { border: "rgba(251,191,36,0.4)", text: "#fbbf24", bg: "rgba(251,191,36,0.06)" },
+  };
+  const c = color ? colors[color] : { border: "var(--color-brd)", text: "var(--color-t2)", bg: "transparent" };
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="w-full px-3 py-2 rounded-md border font-display text-[0.78rem] font-medium transition-all disabled:opacity-40 hover:translate-y-[-1px]"
+      style={{ borderColor: c.border, color: c.text, background: c.bg }}
+    >
+      {children}
+    </button>
   );
 }

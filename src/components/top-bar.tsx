@@ -9,13 +9,13 @@ const TABS: Array<{ slug: string; label: string; href: string }> = [
   { slug: "studio", label: "Studio", href: "/create" },
   { slug: "analytics", label: "Analytics", href: "/analytics" },
   { slug: "distribution", label: "Distribution", href: "/distribution" },
-  { slug: "playlists", label: "Playlists", href: "/playlists" },
   { slug: "archive", label: "Archive", href: "/archive" },
 ];
 
 export function TopBar() {
   const pathname = usePathname() ?? "/";
   const [q, setQ] = useState("");
+  const [focused, setFocused] = useState(false);
 
   const isActive = (href: string) => {
     if (href === "/library") return pathname === "/" || pathname.startsWith("/library");
@@ -24,14 +24,22 @@ export function TopBar() {
   };
 
   return (
-    <header className="sticky top-0 z-30 backdrop-blur-xl" style={{ background: "var(--color-bg2)", borderBottom: "1px solid var(--color-brd)" }}>
-      <div className="max-w-[1440px] mx-auto px-6 lg:px-10 h-14 flex items-center gap-4">
-        <Link href="/" className="flex flex-col shrink-0 leading-none">
-          <span className="font-display text-[1.1rem] font-extrabold tracking-tight title-grad">Music House</span>
-          <span className="font-mono text-[0.5rem] uppercase tracking-[0.08em] text-t3 mt-0.5">Suno V5.5 · Mureka V8 · Distrokid</span>
+    <header
+      className="sticky top-0 z-30 backdrop-blur-xl"
+      style={{
+        background: "linear-gradient(180deg, rgba(10,12,18,0.85), rgba(10,12,18,0.7))",
+        borderBottom: "1px solid var(--color-brd)",
+      }}
+    >
+      <div className="max-w-[1600px] mx-auto px-8 lg:px-12 h-16 flex items-center gap-8">
+        <Link href="/library" className="flex flex-col shrink-0 leading-none group">
+          <span className="font-display text-[1.15rem] font-extrabold tracking-tight title-grad transition-all">
+            Music House
+          </span>
+          <span className="label-mono-amber mt-1.5">Suno V5.5 · Mureka V8 · Distrokid</span>
         </Link>
 
-        <nav className="flex items-center gap-0.5 ml-4">
+        <nav className="flex items-center gap-1 ml-2">
           {TABS.map((t) => {
             const active = isActive(t.href);
             return (
@@ -39,43 +47,46 @@ export function TopBar() {
                 key={t.slug}
                 href={t.href}
                 className={
-                  "relative px-3 py-1.5 text-[0.75rem] font-display font-semibold rounded transition-colors " +
-                  (active ? "text-pink" : "text-t3 hover:text-t2")
+                  "relative px-4 py-2 text-[0.78rem] font-display font-semibold rounded-md transition-colors " +
+                  (active ? "tab-active" : "text-t3 hover:text-t1")
                 }
-                style={active ? { background: "rgba(236,72,153,0.08)" } : undefined}
               >
                 {t.label}
-                {active && <span className="absolute bottom-0 left-[20%] right-[20%] h-[2px] bg-pink rounded-full" />}
               </Link>
             );
           })}
         </nav>
 
-        <div className="ml-auto relative">
-          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-t3 text-[0.75rem]">⌕</span>
-          <input
-            type="text"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search tracks..."
-            className="font-mono text-[0.68rem] pl-7 pr-2.5 h-7 rounded-md border outline-none transition-all"
-            style={{
-              background: "var(--color-surface)",
-              borderColor: q ? "var(--color-purple)" : "var(--color-brd)",
-              color: "var(--color-t1)",
-              width: q ? 260 : 180,
-            }}
-          />
-        </div>
+        <div className="ml-auto flex items-center gap-6">
+          <label
+            className="relative flex items-center"
+            style={{ width: focused || q ? 280 : 200, transition: "width 0.32s cubic-bezier(0.2,0.8,0.2,1)" }}
+          >
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-t3 text-[0.85rem] pointer-events-none">⌕</span>
+            <input
+              type="text"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              placeholder="Search tracks, albums, artists…"
+              className="font-mono text-[0.7rem] pl-8 pr-3 h-8 w-full rounded-md border outline-none bg-surface/80 transition-colors text-t1 placeholder:text-t3/70"
+              style={{
+                borderColor: focused || q ? "rgba(236,72,153,0.45)" : "var(--color-brd)",
+              }}
+            />
+          </label>
 
-        <a
-          href="https://project-hub-olive-pi.vercel.app"
-          target="_blank"
-          rel="noreferrer"
-          className="font-mono text-[0.65rem] text-t3 hover:text-purple transition-colors"
-        >
-          Hub
-        </a>
+          <a
+            href="https://project-hub-olive-pi.vercel.app"
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono text-[0.65rem] uppercase tracking-[0.22em] text-t3 hover:text-amber transition-colors flex items-center gap-1.5"
+          >
+            <span className="w-1 h-1 rounded-full bg-amber/60" />
+            Hub
+          </a>
+        </div>
       </div>
     </header>
   );
