@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { usePlayer, type PlayerTrack } from "./player-context";
+import { useUrlCache } from "./url-cache-provider";
 
 type TrackRowProps = {
   trackId: Id<"tracks">;
@@ -15,6 +16,7 @@ type TrackRowProps = {
   duration?: number;
   generator: "suno" | "mureka" | "import";
   audioKey: string;
+  coverUrl?: string;
   hearted: boolean;
   onShowLyrics?: () => void;
   queue?: PlayerTrack[];
@@ -30,6 +32,7 @@ export function TrackRow({
   duration,
   generator,
   audioKey,
+  coverUrl,
   hearted,
   onShowLyrics,
   queue,
@@ -40,17 +43,14 @@ export function TrackRow({
   const reorder = useMutation(api.tracks.reorder);
   const move = useMutation(api.tracks.move);
   const { play, current } = usePlayer();
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const { ensure, get } = useUrlCache();
   const [menuOpen, setMenuOpen] = useState(false);
   const [dragOver, setDragOver] = useState<"above" | "below" | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    fetch(`/api/audio?key=${encodeURIComponent(audioKey)}`)
-      .then((r) => r.json())
-      .then((j) => setAudioUrl(j.url ?? null))
-      .catch(() => {});
-  }, [audioKey]);
+    if (audioKey) ensure([audioKey]);
+  }, [audioKey, ensure]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -66,19 +66,19 @@ export function TrackRow({
   const secs = duration ? Math.floor(duration % 60) : 0;
   const dur = duration ? `${mins}:${secs.toString().padStart(2, "0")}` : "—";
 
-  const handlePlay = () => {
-    if (!audioUrl) return;
-    play({ id: trackId, title, artist: artistSlug, album: albumSlug, audioUrl }, queue);
+  const handlePlay = async () => {
+    const url = get(audioKey) ?? (await ensure([audioKey]))[audioKey];
+    if (!url) return;
+    play(
+      { id: trackId, title, artist: artistSlug, album: albumSlug, audioUrl: url, coverUrl },
+      queue,
+    );
   };
 
   const onDragStart = (e: React.DragEvent) => {
     e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData(
-      "application/x-mh-track",
-      JSON.stringify({ trackId, artistSlug, albumSlug, trackNum }),
-    );
+    e.dataTransfer.setData("application/x-mh-track", JSON.stringify({ trackId, artistSlug, albumSlug }));
   };
-
   const onDragOver = (e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes("application/x-mh-track")) return;
     e.preventDefault();
@@ -86,9 +86,7 @@ export function TrackRow({
     const r = e.currentTarget.getBoundingClientRect();
     setDragOver(e.clientY < r.top + r.height / 2 ? "above" : "below");
   };
-
   const onDragLeave = () => setDragOver(null);
-
   const onDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(null);
@@ -118,43 +116,32 @@ export function TrackRow({
         (dragOver === "below" ? " drag-below" : "")
       }
     >
-      <span className="drag-handle text-xs select-none w-4 shrink-0 cursor-grab active:cursor-grabbing">⋮⋮</span>
-      <span className="font-mono text-[0.62rem] text-t4 w-6 text-right shrink-0 tabular-nums">
-        {trackNum ?? "—"}
-      </span>
+      <span className="drag-handle text-[0.7rem] select-none w-4 shrink-0 cursor-grab active:cursor-grabbing">⋮⋮</span>
+      <span className="font-mono text-[0.62rem] text-t4 w-6 text-right shrink-0 tabular-nums">{trackNum ?? "—"}</span>
       <button
         onClick={handlePlay}
-        disabled={!audioUrl}
         className={
           "w-7 h-7 rounded-full grid place-items-center transition-all shrink-0 " +
-          (isPlaying ? "bg-pink/15 text-pink" : "bg-purple/10 text-purple hover:bg-purple/25 hover:scale-110") +
-          " disabled:opacity-25"
+          (isPlaying ? "bg-pink/15 text-pink" : "bg-purple/10 text-purple hover:bg-purple/25 hover:scale-110")
         }
         aria-label="Play"
       >
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M8 5v14l11-7z" />
-        </svg>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
       </button>
       <div className="flex-1 min-w-0">
-        <div className={"text-[0.82rem] truncate font-display font-medium " + (isPlaying ? "text-purple" : "text-t1")}>
+        <div className={"text-[0.83rem] truncate font-display font-medium " + (isPlaying ? "text-purple" : "text-paper")}>
           {title}
         </div>
         <div className="font-mono text-[0.56rem] text-t3 mt-0.5 truncate">
           {artistSlug}
           {albumSlug ? " · " + albumSlug : ""}
-          <span className="ml-2 text-[0.5rem]" style={{ color: generator === "suno" ? "#ec4899" : "#8b5cf6" }}>
-            ◆ {generator}
-          </span>
+          <span className="ml-2 text-[0.5rem]" style={{ color: generator === "suno" ? "#ec4899" : "#8b5cf6" }}>◆ {generator}</span>
         </div>
       </div>
       <span className="font-mono text-[0.62rem] text-t3 w-10 text-right shrink-0 tabular-nums">{dur}</span>
       <button
         onClick={() => toggleHeart({ trackId })}
-        className={
-          "w-7 h-7 grid place-items-center transition-all shrink-0 " +
-          (hearted ? "text-pink animate-pulse-dot" : "text-t4 hover:text-pink")
-        }
+        className={"w-7 h-7 grid place-items-center transition-all shrink-0 " + (hearted ? "text-pink animate-pulse-dot" : "text-t4 hover:text-pink")}
         aria-label={hearted ? "Unheart" : "Heart"}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill={hearted ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
@@ -164,23 +151,20 @@ export function TrackRow({
       <div className="relative shrink-0" ref={menuRef}>
         <button
           onClick={() => setMenuOpen((m) => !m)}
-          className="track-menu-btn w-6 h-7 grid place-items-center text-t3 hover:text-t1 transition-colors"
+          className="track-menu-btn w-6 h-7 grid place-items-center text-t3 hover:text-paper transition-colors"
           aria-label="More"
         >
           ⋮
         </button>
         {menuOpen && (
-          <div
-            className="absolute right-0 top-9 z-30 w-40 rounded-md border bg-elevated shadow-2xl py-1 animate-fi"
-            style={{ borderColor: "var(--color-brd)" }}
-          >
-            <MenuItem icon="♪" label="Lyrics" onClick={() => { setMenuOpen(false); onShowLyrics?.(); }} />
-            <MenuItem icon="📁" label="Move" onClick={() => setMenuOpen(false)} />
-            <MenuItem icon="▶" label="Add to playlist" onClick={() => setMenuOpen(false)} />
-            <MenuItem icon="📡" label="Distribute" onClick={() => setMenuOpen(false)} />
-            <MenuItem icon="📦" label="Archive" onClick={() => { archive({ id: trackId }); setMenuOpen(false); }} />
+          <div className="absolute right-0 top-9 z-30 w-40 rounded-md border bg-elevated shadow-2xl py-1 animate-fi" style={{ borderColor: "var(--color-brd)" }}>
+            <Item icon="♪" label="Lyrics" onClick={() => { setMenuOpen(false); onShowLyrics?.(); }} />
+            <Item icon="📁" label="Move" onClick={() => setMenuOpen(false)} />
+            <Item icon="▶" label="Add to playlist" onClick={() => setMenuOpen(false)} />
+            <Item icon="📡" label="Distribute" onClick={() => setMenuOpen(false)} />
+            <Item icon="📦" label="Archive" onClick={() => { archive({ id: trackId }); setMenuOpen(false); }} />
             <div className="my-1 mx-2 h-px bg-brd" />
-            <MenuItem icon="🗑" label="Delete" danger onClick={() => setMenuOpen(false)} />
+            <Item icon="🗑" label="Delete" danger onClick={() => setMenuOpen(false)} />
           </div>
         )}
       </div>
@@ -188,14 +172,11 @@ export function TrackRow({
   );
 }
 
-function MenuItem({ icon, label, onClick, danger }: { icon: string; label: string; onClick: () => void; danger?: boolean }) {
+function Item({ icon, label, onClick, danger }: { icon: string; label: string; onClick: () => void; danger?: boolean }) {
   return (
     <button
       onClick={onClick}
-      className={
-        "w-full px-3 py-1.5 text-[0.7rem] text-left flex items-center gap-2.5 transition-colors " +
-        (danger ? "text-red hover:bg-red/[0.06]" : "text-t1 hover:bg-purple/[0.08] hover:text-purple")
-      }
+      className={"w-full px-3 py-1.5 text-[0.7rem] text-left flex items-center gap-2.5 transition-colors " + (danger ? "text-red hover:bg-red/[0.06]" : "text-paper hover:bg-purple/[0.08] hover:text-purple")}
     >
       <span className="text-[0.75rem] w-4 text-center">{icon}</span>
       <span className="font-display">{label}</span>

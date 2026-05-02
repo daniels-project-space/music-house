@@ -76,10 +76,10 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
   return (
     <main className="max-w-[1600px] mx-auto px-8 lg:px-12 py-10 animate-fi">
       <a
-        href={`/library/${artist}`}
+        href={`/library`}
         className="inline-flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.22em] text-t3 hover:text-amber transition-colors mb-8"
       >
-        ← {artist}
+        ← Library
       </a>
 
       <div className="grid grid-cols-12 gap-10">

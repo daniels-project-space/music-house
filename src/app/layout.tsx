@@ -4,6 +4,7 @@ import { Player } from "@/components/player";
 import { PlayerProvider } from "@/components/player-context";
 import { TopBar } from "@/components/top-bar";
 import { PipelineStrip } from "@/components/pipeline-strip";
+import { UrlCacheProvider } from "@/components/url-cache-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,18 +18,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
-          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@300;400;600;700;800&display=swap"
+          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap"
           rel="stylesheet"
         />
       </head>
-      <body className="pb-24">
+      <body className="pb-28">
         <ConvexClientProvider>
-          <PlayerProvider>
-            <TopBar />
-            <PipelineStrip />
-            {children}
-            <Player />
-          </PlayerProvider>
+          <UrlCacheProvider>
+            <PlayerProvider>
+              <TopBar />
+              <PipelineStrip />
+              {children}
+              <Player />
+            </PlayerProvider>
+          </UrlCacheProvider>
         </ConvexClientProvider>
       </body>
     </html>

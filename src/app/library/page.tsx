@@ -1,8 +1,13 @@
 "use client";
 
+import { useEffect, useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { AlbumCard } from "@/components/album-card";
+import { PageHero, PageShell } from "@/components/page-hero";
+import { useUrlCache, useResolvedUrls } from "@/components/url-cache-provider";
+import { TrackRow, useHeartedSet } from "@/components/track-row";
+import type { PlayerTrack } from "@/components/player-context";
 
 const SECTIONS: Array<{ key: string; label: string; icon: string; accent: string; rule: string }> = [
   { key: "film_cinematic", label: "Film & Cinematic", icon: "▲", accent: "#ef4444", rule: "rgba(239,68,68,0.35)" },
@@ -14,6 +19,11 @@ export default function LibraryPage() {
   const albums = useQuery(api.albums.list, {}) ?? [];
   const tracks = useQuery(api.tracks.list, {}) ?? [];
   const artists = useQuery(api.artists.list, {}) ?? [];
+  const hearted = useHeartedSet();
+
+  // Bulk-prefetch every album cover in one shot (cached). Player URLs not needed here.
+  const coverKeys = useMemo(() => albums.map((a) => a.coverKey).filter((k): k is string => !!k), [albums]);
+  useResolvedUrls(coverKeys);
 
   const tracksByAlbum = new Map<string, number>();
   for (const t of tracks) {
@@ -23,98 +33,74 @@ export default function LibraryPage() {
 
   type AlbumDoc = (typeof albums)[number];
   const bySection: Record<string, AlbumDoc[]> = {};
-  const unsorted: AlbumDoc[] = [];
   const sunoStaging: AlbumDoc[] = [];
+  const otherUnsorted: AlbumDoc[] = [];
   for (const a of albums) {
-    if (a.artistSlug === "_suno") {
-      sunoStaging.push(a);
-      continue;
-    }
-    if (a.artistSlug === "_unsorted") {
-      unsorted.push(a);
-      continue;
-    }
+    if (a.artistSlug === "_suno") { sunoStaging.push(a); continue; }
     const sec = (a as { section?: string }).section;
     if (sec && SECTIONS.some((s) => s.key === sec)) {
       (bySection[sec] ??= []).push(a);
     } else {
-      unsorted.push(a);
+      otherUnsorted.push(a);
     }
   }
 
-  return (
-    <main className="max-w-[1600px] mx-auto px-8 lg:px-12 py-12 animate-fi">
-      {/* hero header */}
-      <div className="mb-16 flex items-end justify-between gap-8 flex-wrap">
-        <div>
-          <p className="label-mono-amber">Library / 2026</p>
-          <h1 className="mt-3 font-display text-[1.6rem] sm:text-[2.4rem] sm:text-[3.5rem] lg:text-[4.25rem] font-extrabold leading-[0.95] tracking-tight text-t1">
-            Library<span className="text-purple/60">.</span>
-          </h1>
-          <p className="mt-4 max-w-xl text-[0.92rem] text-paper-dim leading-relaxed">
-            Generated catalog. Browse by section, dive into an album, hit play. Drag to reorder, ⋮ for more.
-          </p>
-        </div>
-        <div className="flex gap-5 sm:gap-8">
-          <Stat n={artists.length} label="Artists" />
-          <Stat n={albums.length} label="Albums" />
-          <Stat n={tracks.length} label="Tracks" highlight />
-        </div>
-      </div>
+  // Unsorted FLAT TRACKS — tracks whose album is _unsorted/_singles or has no albumSlug
+  const unsortedTracks = useMemo(
+    () => tracks.filter((t) => !t.albumSlug || t.albumSlug === "_singles" || t.albumSlug === "_unsorted").slice(0, 80),
+    [tracks],
+  );
 
-      {/* section bands */}
-      <div className="space-y-20">
+  return (
+    <PageShell>
+      <PageHero
+        kicker="Library / 2026"
+        title="Library"
+        emphasis="catalog"
+        description="Generated tracks, organised into albums and sections. Drag rows to reorder. Click ⋮ for more."
+        accent="purple"
+        stats={[
+          { label: "Artists", value: artists.length },
+          { label: "Albums", value: albums.length },
+          { label: "Tracks", value: tracks.length, highlight: true },
+        ]}
+      />
+
+      <div className="space-y-24">
         {SECTIONS.map((s) => {
           const list = bySection[s.key] ?? [];
           if (list.length === 0) return null;
           return (
-            <Section key={s.key} label={s.label} icon={s.icon} accent={s.accent} rule={s.rule} count={list.length}>
+            <Section
+              key={s.key}
+              label={s.label}
+              icon={s.icon}
+              accent={s.accent}
+              rule={s.rule}
+              count={list.length}
+            >
               <Grid albums={list} tracksByAlbum={tracksByAlbum} />
             </Section>
           );
         })}
 
         {sunoStaging.length > 0 && (
-          <Section
-            label="Suno Staging"
-            icon="◐"
-            accent="#ec4899"
-            rule="rgba(236,72,153,0.35)"
-            count={sunoStaging.length}
-          >
+          <Section label="Suno Staging" icon="◐" accent="#ec4899" rule="rgba(236,72,153,0.35)" count={sunoStaging.length}>
             <Grid albums={sunoStaging} tracksByAlbum={tracksByAlbum} />
           </Section>
         )}
 
-        {unsorted.length > 0 && (
-          <Section
-            label="Unsorted"
-            icon="◯"
-            accent="#fbbf24"
-            rule="rgba(251,191,36,0.35)"
-            count={unsorted.length}
-          >
-            <Grid albums={unsorted} tracksByAlbum={tracksByAlbum} />
+        {otherUnsorted.length > 0 && (
+          <Section label="Other" icon="◯" accent="#94a3b8" rule="rgba(148,163,184,0.3)" count={otherUnsorted.length}>
+            <Grid albums={otherUnsorted} tracksByAlbum={tracksByAlbum} />
           </Section>
         )}
-      </div>
-    </main>
-  );
-}
 
-function Stat({ n, label, highlight }: { n: number; label: string; highlight?: boolean }) {
-  return (
-    <div className="text-right">
-      <p className="label-mono">{label}</p>
-      <p
-        className={
-          "mt-1.5 font-mono font-bold tabular-nums " +
-          (highlight ? "title-grad text-[1.6rem] sm:text-[2.4rem]" : "text-t1 text-[1.6rem] sm:text-[2.4rem]")
-        }
-      >
-        {String(n).padStart(2, "0")}
-      </p>
-    </div>
+        {unsortedTracks.length > 0 && (
+          <UnsortedTracks tracks={unsortedTracks} hearted={hearted} />
+        )}
+      </div>
+    </PageShell>
   );
 }
 
@@ -135,39 +121,23 @@ function Section({
 }) {
   return (
     <section>
-      <div
-        className="flex items-baseline justify-between mb-7 pb-3"
-        style={{ borderBottom: `1px solid ${rule}` }}
-      >
+      <div className="flex items-baseline justify-between mb-7 pb-3" style={{ borderBottom: `1px solid ${rule}` }}>
         <div className="flex items-baseline gap-3">
-          <span style={{ color: accent }} className="text-[1.1rem]">
-            {icon}
-          </span>
-          <h2
-            className="font-display text-[1.55rem] font-semibold tracking-tight"
-            style={{ color: accent }}
-          >
-            {label}
-          </h2>
+          <span style={{ color: accent }} className="text-[1.1rem]">{icon}</span>
+          <h2 className="font-display text-[1.65rem] font-semibold tracking-tight" style={{ color: accent }}>{label}</h2>
         </div>
-        <span className="label-mono">{count} albums</span>
+        <span className="font-mono text-[0.6rem] uppercase tracking-[0.22em] text-paper-faint">{count} albums</span>
       </div>
       {children}
     </section>
   );
 }
 
-function Grid({
-  albums,
-  tracksByAlbum,
-}: {
-  albums: { _id: string; artistSlug: string; slug: string; name: string; coverKey?: string }[];
-  tracksByAlbum: Map<string, number>;
-}) {
+function Grid({ albums, tracksByAlbum }: { albums: { _id: string; artistSlug: string; slug: string; name: string; coverKey?: string }[]; tracksByAlbum: Map<string, number>; }) {
   return (
     <div
       className="grid gap-7"
-      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}
+      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}
     >
       {albums.map((a) => (
         <AlbumCard
@@ -180,5 +150,63 @@ function Grid({
         />
       ))}
     </div>
+  );
+}
+
+function UnsortedTracks({
+  tracks,
+  hearted,
+}: {
+  tracks: Array<{
+    _id: string;
+    title: string;
+    artistSlug: string;
+    albumSlug?: string;
+    duration?: number;
+    generator: "suno" | "mureka" | "import";
+    audioKey: string;
+    trackNum?: number;
+  }>;
+  hearted: Set<string>;
+}) {
+  // bulk presign all audio keys so play is instant
+  const keys = useMemo(() => tracks.map((t) => t.audioKey), [tracks]);
+  useResolvedUrls(keys);
+  const queue: PlayerTrack[] = tracks.map((t) => ({
+    id: t._id,
+    title: t.title,
+    artist: t.artistSlug,
+    album: t.albumSlug,
+    audioUrl: "",
+  }));
+
+  return (
+    <section>
+      <div className="flex items-baseline justify-between mb-7 pb-3" style={{ borderBottom: "1px solid rgba(251,191,36,0.35)" }}>
+        <div className="flex items-baseline gap-3">
+          <span className="text-[1.1rem] text-amber">◯</span>
+          <h2 className="font-display text-[1.65rem] font-semibold tracking-tight text-amber">Unsorted</h2>
+        </div>
+        <span className="font-mono text-[0.6rem] uppercase tracking-[0.22em] text-paper-faint">{tracks.length} tracks</span>
+      </div>
+      <div className="rounded-xl border border-brd bg-card/50 backdrop-blur p-3 space-y-0.5">
+        {tracks.map((t, i) => (
+          <TrackRow
+            key={t._id}
+            trackId={t._id as never}
+            trackNum={t.trackNum}
+            title={t.title}
+            artistSlug={t.artistSlug}
+            albumSlug={t.albumSlug}
+            duration={t.duration}
+            generator={t.generator}
+            audioKey={t.audioKey}
+            hearted={hearted.has(t._id)}
+            queue={queue}
+            index={i}
+          />
+        ))}
+      </div>
+    </section>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PageHero, PageShell } from "@/components/page-hero";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import Link from "next/link";
@@ -86,7 +87,7 @@ export default function StudioPage() {
   };
 
   return (
-    <main className="max-w-[1600px] mx-auto px-8 lg:px-12 py-12 animate-fi">
+    <PageShell>
       <div className="mb-12 flex items-end justify-between gap-8 flex-wrap">
         <div>
           <p className="label-mono-amber">Studio / 2026</p>
@@ -301,7 +302,7 @@ export default function StudioPage() {
           </div>
         )}
       </section>
-    </main>
+    </PageShell>
   );
 }
 
