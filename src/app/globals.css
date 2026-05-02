@@ -100,3 +100,15 @@ a { color: var(--color-purple); text-decoration: none; }
   pointer-events: none;
   z-index: 1;
 }
+
+@theme {
+  --color-paper: #e8ecf4;
+  --color-paper-dim: rgba(232, 236, 244, 0.65);
+  --color-paper-faint: rgba(232, 236, 244, 0.3);
+  --color-ink: #050608;
+  --color-ink-2: #0a0c12;
+  --color-rule: rgba(45, 52, 70, 0.6);
+  --color-rule-soft: rgba(45, 52, 70, 0.4);
+  --color-brass: #fbbf24;
+  --color-emerald-soft: #34d399;
+}
