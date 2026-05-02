@@ -7,6 +7,7 @@ import { TrackRow, useHeartedSet } from "@/components/track-row";
 import { KaraokeLyrics } from "@/components/karaoke-lyrics";
 import { usePlayer, type PlayerTrack } from "@/components/player-context";
 import { useResolvedUrls } from "@/components/url-cache-provider";
+import Link from "next/link";
 
 export default function AlbumPage({ params }: { params: Promise<{ artist: string; album: string }> }) {
   const { artist, album } = use(params);
@@ -30,7 +31,11 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
   const [draftName, setDraftName] = useState("");
 
   if (!tracks || !albumRow) {
-    return <main className="max-w-[1600px] mx-auto px-8 lg:px-12 py-16 text-paper-dim">loading...</main>;
+    return (
+      <main className="px-5 sm:px-6 lg:px-8 pt-3 pb-32">
+        <p className="font-mono text-[0.6rem] uppercase tracking-[0.2em] text-paper-faint">loading…</p>
+      </main>
+    );
   }
 
   const sorted = [...tracks].sort((a, b) => (a.trackNum ?? 0) - (b.trackNum ?? 0));
@@ -45,10 +50,7 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
     }))
     .filter((t) => t.audioUrl);
 
-  const playAll = () => {
-    if (queue.length) play(queue[0], queue);
-  };
-
+  const playAll = () => { if (queue.length) play(queue[0], queue); };
   const shuffle = () => {
     if (!queue.length) return;
     const shuffled = [...queue].sort(() => Math.random() - 0.5);
@@ -57,6 +59,7 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
 
   const totalDuration = sorted.reduce((s, t) => s + (t.duration ?? 0), 0);
   const durMin = Math.round(totalDuration / 60);
+  const isPlayingThis = !!(current && queue.find((q) => q.id === current.id));
 
   const lyricsTrack = lyricsTrackId
     ? sorted.find((t) => t._id === lyricsTrackId)
@@ -65,33 +68,50 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
       : null;
 
   return (
-    <main className="max-w-[1600px] mx-auto px-8 lg:px-12 py-10 animate-fi">
-      <a
-        href={`/library`}
-        className="inline-flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-[0.22em] text-t3 hover:text-amber transition-colors mb-8"
+    <main className="px-5 sm:px-6 lg:px-8 pt-3 pb-32 animate-fi">
+      <Link
+        href="/library"
+        className="inline-flex items-center gap-2 font-mono text-[0.55rem] uppercase tracking-[0.2em] text-paper-faint hover:text-amber transition-colors mb-3"
       >
-        ← Library
-      </a>
+        ← Back to Albums
+      </Link>
 
-      <div className="grid grid-cols-12 gap-10">
-        {/* LEFT — cover + actions */}
-        <aside className="col-span-12 lg:col-span-4 xl:col-span-3 space-y-6">
+      {/* AHDR — legacy album header: cover left, meta + actions right (horizontal) */}
+      <div
+        className="relative rounded-lg border border-brd bg-card overflow-hidden mb-4"
+        style={{
+          backgroundImage: coverUrl ? `linear-gradient(180deg, rgba(5,6,8,0.85), rgba(5,6,8,0.96)), url(${coverUrl})` : undefined,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      >
+        <div className="flex gap-5 p-5 backdrop-blur-md">
           <div
             className={
-              "relative aspect-square rounded-xl overflow-hidden bg-card border border-brd " +
-              (current && queue.find((q) => q.id === current.id) ? "animate-cover-pulse" : "")
+              "w-[200px] h-[200px] rounded-md overflow-hidden bg-surface shrink-0 ring-1 ring-paper/10 " +
+              (isPlayingThis ? "animate-cover-pulse" : "")
             }
           >
             {coverUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={coverUrl} alt={albumRow.name} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full grid place-items-center text-6xl text-t4">♪</div>
+              <div className="w-full h-full grid place-items-center text-5xl text-paper-faint/40">♪</div>
             )}
           </div>
 
-          <div>
-            <p className="label-mono-amber">{albumRow.section ?? "—"}</p>
+          <div className="flex-1 min-w-0 flex flex-col">
+            <div className="flex items-center gap-2 mb-2">
+              {albumRow.section && (
+                <span className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-amber/85 px-1.5 py-0.5 rounded border border-amber/30">
+                  {albumRow.section.replace(/_/g, " ")}
+                </span>
+              )}
+              <span className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint">
+                {artist} · {sorted.length} trk · {durMin} min
+              </span>
+            </div>
+
             {editingName ? (
               <input
                 value={draftName}
@@ -108,110 +128,82 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
                   if (e.key === "Escape") setEditingName(false);
                 }}
                 autoFocus
-                className="mt-1 w-full bg-transparent outline-none font-display text-2xl xl:text-4xl font-extrabold leading-[1.05] tracking-tight text-t1 border-b border-pink/40"
+                className="font-display text-[1.5rem] sm:text-[1.75rem] font-extrabold leading-[1.05] tracking-tight text-paper bg-transparent outline-none border-b border-pink/40 mb-2"
               />
             ) : (
               <h1
-                className="mt-1 font-display text-2xl xl:text-4xl font-extrabold leading-[1.05] tracking-tight text-t1 cursor-text"
+                className="font-display text-[1.5rem] sm:text-[1.75rem] font-extrabold leading-[1.05] tracking-tight text-paper cursor-text mb-2"
                 onDoubleClick={() => { setDraftName(albumRow.name); setEditingName(true); }}
                 title="Double-click to rename"
               >
                 {albumRow.name}
               </h1>
             )}
-            <p className="mt-2 font-mono text-[0.62rem] text-t3 uppercase tracking-[0.14em]">
-              {artist} · {sorted.length} tracks · {durMin} min
-            </p>
-            {albumRow.description && (
-              <p className="mt-3 text-[0.85rem] text-t2 leading-relaxed">{albumRow.description}</p>
-            )}
-          </div>
 
-          <div className="space-y-2">
-            <ActionButton color="purple" onClick={playAll} disabled={!queue.length}>
-              ▶ Play All
-            </ActionButton>
-            <ActionButton onClick={shuffle} disabled={!queue.length}>
-              ⤮ Shuffle
-            </ActionButton>
-            <div className="grid grid-cols-2 gap-2">
-              <ActionButton
+            {albumRow.description && (
+              <p className="text-[0.78rem] text-paper-dim leading-relaxed mb-3 max-w-2xl">{albumRow.description}</p>
+            )}
+
+            <div className="flex items-center gap-1.5 flex-wrap mt-auto">
+              <Bx onClick={playAll} disabled={!queue.length} color="purple">▶ Play All</Bx>
+              <Bx onClick={shuffle} disabled={!queue.length}>⤮ Shuffle</Bx>
+              <Bx
                 color="cyan"
-                onClick={() => {
-                  navigator.clipboard.writeText(window.location.href);
-                }}
+                onClick={() => navigator.clipboard.writeText(window.location.href)}
               >
                 🔗 Share
-              </ActionButton>
-              <ActionButton color="green">Complete</ActionButton>
+              </Bx>
+              <Bx color="green">Complete</Bx>
+              <Bx color="amber">📡 Distribute</Bx>
             </div>
-            <ActionButton color="amber">+ Distribute</ActionButton>
-          </div>
-        </aside>
 
-        {/* CENTER — track list */}
-        <section className="col-span-12 lg:col-span-5 xl:col-span-6">
-          <div className="flex items-center justify-between mb-4">
-            <p className="label-mono">Tracks</p>
-            <p className="label-mono">{sorted.length}</p>
-          </div>
-          <ol className="space-y-0.5">
-            {sorted.map((t) => (
-              <TrackRow
-                key={t._id}
-                trackId={t._id}
-                trackNum={t.trackNum}
-                title={t.title}
-                artistSlug={t.artistSlug}
-                albumSlug={t.albumSlug}
-                duration={t.duration}
-                generator={t.generator}
-                audioKey={t.audioKey}
-                hearted={hearted.has(t._id)}
-                onShowLyrics={() => setLyricsTrackId(t._id)}
-                queue={queue}
-              />
-            ))}
-          </ol>
-        </section>
-
-        {/* RIGHT — sticky lyrics karaoke */}
-        <aside className="col-span-12 lg:col-span-3 xl:col-span-3">
-          <div
-            className="sticky top-24 rounded-xl border border-brd bg-card/60 backdrop-blur p-5 min-h-[420px]"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <p className="label-mono">Lyrics</p>
-              {lyricsTrack && (
-                <button
-                  onClick={() => setLyricsTrackId(null)}
-                  className="font-mono text-[0.55rem] uppercase tracking-[0.18em] text-t3 hover:text-t1"
-                >
-                  clear
-                </button>
-              )}
-            </div>
-            {lyricsTrack ? (
-              <KaraokeLyrics
-                title={lyricsTrack.title}
-                lyrics={lyricsTrack.lyrics ?? []}
-                trackId={lyricsTrack._id}
-              />
-            ) : (
-              <div className="grid place-items-center h-[340px] text-center">
-                <p className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-t4 leading-relaxed max-w-[180px]">
-                  Click ⋮ on any track and pick Lyrics. Or play one — it follows.
-                </p>
+            {lyricsTrack && (
+              <div className="mt-3 rounded border border-brd bg-bg/60 p-3 max-h-[148px] overflow-hidden">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="font-mono text-[0.5rem] uppercase tracking-[0.2em] text-purple">Lyrics</span>
+                  <button
+                    onClick={() => setLyricsTrackId(null)}
+                    className="font-mono text-[0.5rem] uppercase tracking-[0.16em] text-paper-faint hover:text-paper"
+                  >
+                    clear
+                  </button>
+                </div>
+                <KaraokeLyrics
+                  title={lyricsTrack.title}
+                  lyrics={lyricsTrack.lyrics ?? []}
+                  trackId={lyricsTrack._id}
+                />
               </div>
             )}
           </div>
-        </aside>
+        </div>
+      </div>
+
+      {/* Track list — full width below header */}
+      <div className="rounded-md border border-brd bg-card/50 backdrop-blur p-1">
+        {sorted.map((t, i) => (
+          <TrackRow
+            key={t._id}
+            trackId={t._id}
+            trackNum={t.trackNum}
+            title={t.title}
+            artistSlug={t.artistSlug}
+            albumSlug={t.albumSlug}
+            duration={t.duration}
+            generator={t.generator}
+            audioKey={t.audioKey}
+            hearted={hearted.has(t._id)}
+            onShowLyrics={() => setLyricsTrackId(t._id)}
+            queue={queue}
+            index={i}
+          />
+        ))}
       </div>
     </main>
   );
 }
 
-function ActionButton({
+function Bx({
   children,
   color,
   onClick,
@@ -233,7 +225,7 @@ function ActionButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className="w-full px-3 py-2 rounded-md border font-display text-[0.78rem] font-medium transition-all disabled:opacity-40 hover:translate-y-[-1px]"
+      className="font-mono text-[0.6rem] uppercase tracking-[0.14em] px-2.5 py-1.5 rounded border transition-all disabled:opacity-30 hover:translate-y-[-1px]"
       style={{ borderColor: c.border, color: c.text, background: c.bg }}
     >
       {children}
