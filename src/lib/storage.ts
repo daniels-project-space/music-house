@@ -26,6 +26,7 @@ async function client(): Promise<S3Client> {
         region: "auto",
         endpoint,
         credentials: { accessKeyId, secretAccessKey },
+        forcePathStyle: true,
       });
     })();
   }
