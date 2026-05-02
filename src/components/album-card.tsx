@@ -61,7 +61,7 @@ export function AlbumCard({ artist, slug, name, trackCount, coverKey }: Props) {
         <h3 className="font-display text-[0.92rem] font-semibold tracking-tight truncate text-t1">
           {name}
         </h3>
-        <p className="mt-0.5 font-mono text-[0.55rem] uppercase tracking-[0.14em] text-t3 truncate">
+        <p className="mt-0.5 font-mono text-[0.6rem] uppercase tracking-[0.16em] text-amber/85 truncate font-semibold">
           {artist}
         </p>
       </div>
