@@ -101,7 +101,7 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
 
           <div>
             <p className="label-mono-amber">{albumRow.section ?? "—"}</p>
-            <h1 className="mt-1 font-display text-3xl xl:text-4xl font-extrabold leading-[1.05] tracking-tight text-t1">
+            <h1 className="mt-1 font-display text-2xl xl:text-4xl font-extrabold leading-[1.05] tracking-tight text-t1">
               {albumRow.name}
             </h1>
             <p className="mt-2 font-mono text-[0.62rem] text-t3 uppercase tracking-[0.14em]">

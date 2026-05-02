@@ -27,7 +27,7 @@ export function PipelineStrip() {
 
   return (
     <div
-      className="px-6 lg:px-10 py-2 flex items-center gap-1 overflow-x-auto"
+      className="px-5 sm:px-8 lg:px-12 py-2 flex items-center gap-1 overflow-x-auto"
       style={{ background: "linear-gradient(90deg, var(--color-bg2), rgba(14,17,24,0.95))", borderBottom: "1px solid var(--color-brd)" }}
     >
       <div className="max-w-[1440px] mx-auto w-full flex items-center gap-1">
@@ -36,9 +36,9 @@ export function PipelineStrip() {
             <div key={s.key} className="flex items-center">
               {i > 0 && <span className="text-t4 text-[0.65rem] px-1 shrink-0">→</span>}
               <button className="flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-white/3 transition shrink-0">
-                <span className="text-[0.8rem]">{s.icon}</span>
+                <span className="text-[0.7rem] sm:text-[0.8rem]">{s.icon}</span>
                 <div className="text-left">
-                  <div className={"font-mono text-[0.95rem] font-bold leading-none " + s.color}>{counts[s.key]}</div>
+                  <div className={"font-mono text-[0.85rem] sm:text-[0.95rem] font-bold leading-none " + s.color}>{counts[s.key]}</div>
                   <div className="font-mono text-[0.5rem] uppercase tracking-[0.06em] text-t3 mt-0.5">{s.label}</div>
                 </div>
               </button>
@@ -60,7 +60,7 @@ export function PipelineStrip() {
 function Stat({ value, label, gradient }: { value: string | number; label: string; gradient?: boolean }) {
   return (
     <div className="text-right">
-      <div className={"font-mono text-[0.8rem] font-bold leading-none " + (gradient ? "title-grad" : "text-t1")}>{value}</div>
+      <div className={"font-mono text-[0.7rem] sm:text-[0.8rem] font-bold leading-none " + (gradient ? "title-grad" : "text-t1")}>{value}</div>
       <div className="font-mono text-[0.45rem] uppercase tracking-[0.06em] text-t3 mt-1">{label}</div>
     </div>
   );

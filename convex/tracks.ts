@@ -72,3 +72,46 @@ export const setLyrics = mutation({
   },
   handler: async (ctx, { id, lyrics }) => ctx.db.patch(id, { lyrics }),
 });
+
+
+export const move = mutation({
+  args: {
+    id: v.id("tracks"),
+    targetArtistSlug: v.string(),
+    targetAlbumSlug: v.optional(v.string()),
+    targetPosition: v.optional(v.number()),
+  },
+  handler: async (ctx, { id, targetArtistSlug, targetAlbumSlug, targetPosition }) => {
+    const track = await ctx.db.get(id);
+    if (!track) throw new Error("Track not found");
+    const patch: { artistSlug: string; albumSlug?: string; trackNum?: number } = {
+      artistSlug: targetArtistSlug,
+      albumSlug: targetAlbumSlug,
+    };
+    if (typeof targetPosition === "number") patch.trackNum = targetPosition;
+    await ctx.db.patch(id, patch);
+  },
+});
+
+export const reorder = mutation({
+  args: {
+    id: v.id("tracks"),
+    position: v.number(),
+  },
+  handler: async (ctx, { id, position }) => {
+    const track = await ctx.db.get(id);
+    if (!track) throw new Error("Track not found");
+    const siblings = await ctx.db
+      .query("tracks")
+      .withIndex("by_artist_album", (q) =>
+        q.eq("artistSlug", track.artistSlug).eq("albumSlug", track.albumSlug),
+      )
+      .collect();
+    const sorted = siblings.sort((a, b) => (a.trackNum ?? 0) - (b.trackNum ?? 0));
+    const without = sorted.filter((t) => t._id !== id);
+    without.splice(Math.max(0, Math.min(position, without.length)), 0, track);
+    for (let i = 0; i < without.length; i++) {
+      await ctx.db.patch(without[i]._id, { trackNum: i + 1 });
+    }
+  },
+});

@@ -48,14 +48,14 @@ export default function LibraryPage() {
       <div className="mb-16 flex items-end justify-between gap-8 flex-wrap">
         <div>
           <p className="label-mono-amber">Library / 2026</p>
-          <h1 className="mt-3 font-display text-[3.5rem] lg:text-[4.25rem] font-extrabold leading-[0.95] tracking-tight text-t1">
+          <h1 className="mt-3 font-display text-[1.6rem] sm:text-[2.4rem] sm:text-[3.5rem] lg:text-[4.25rem] font-extrabold leading-[0.95] tracking-tight text-t1">
             Library<span className="text-purple/60">.</span>
           </h1>
           <p className="mt-4 max-w-xl text-[0.92rem] text-paper-dim leading-relaxed">
             Generated catalog. Browse by section, dive into an album, hit play. Drag to reorder, ⋮ for more.
           </p>
         </div>
-        <div className="flex gap-8">
+        <div className="flex gap-5 sm:gap-8">
           <Stat n={artists.length} label="Artists" />
           <Stat n={albums.length} label="Albums" />
           <Stat n={tracks.length} label="Tracks" highlight />
@@ -109,7 +109,7 @@ function Stat({ n, label, highlight }: { n: number; label: string; highlight?: b
       <p
         className={
           "mt-1.5 font-mono font-bold tabular-nums " +
-          (highlight ? "title-grad text-[2.4rem]" : "text-t1 text-[2.4rem]")
+          (highlight ? "title-grad text-[1.6rem] sm:text-[2.4rem]" : "text-t1 text-[1.6rem] sm:text-[2.4rem]")
         }
       >
         {String(n).padStart(2, "0")}
@@ -167,7 +167,7 @@ function Grid({
   return (
     <div
       className="grid gap-7"
-      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}
+      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}
     >
       {albums.map((a) => (
         <AlbumCard
