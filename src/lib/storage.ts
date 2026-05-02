@@ -27,6 +27,8 @@ async function client(): Promise<S3Client> {
         endpoint,
         credentials: { accessKeyId, secretAccessKey },
         forcePathStyle: true,
+        requestChecksumCalculation: "WHEN_REQUIRED",
+        responseChecksumValidation: "WHEN_REQUIRED",
       });
     })();
   }
