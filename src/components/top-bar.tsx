@@ -37,12 +37,9 @@ export function TopBar() {
       }}
     >
       <div className="max-w-[1600px] mx-auto px-5 sm:px-8 lg:px-12 h-16 flex items-center gap-3 sm:gap-6 lg:gap-8">
-        <Link href="/library" className="flex flex-col shrink-0 leading-none">
-          <span className="font-display text-[1.05rem] sm:text-[1.15rem] font-extrabold tracking-tight title-grad">
+        <Link href="/library" className="shrink-0 leading-none group/logo">
+          <span className="font-display text-[1.02rem] sm:text-[1.08rem] font-bold tracking-[-0.01em] text-paper transition-colors group-hover/logo:text-pink">
             Music House
-          </span>
-          <span className="hidden sm:block label-mono-amber mt-1.5">
-            Suno V5.5 · Mureka V8 · Distrokid
           </span>
         </Link>
 

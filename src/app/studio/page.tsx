@@ -88,22 +88,18 @@ export default function StudioPage() {
 
   return (
     <PageShell>
-      <div className="mb-12 flex items-end justify-between gap-8 flex-wrap">
-        <div>
-          <p className="label-mono-amber">Studio / 2026</p>
-          <h1 className="mt-3 font-display text-[3.25rem] lg:text-[3.75rem] font-extrabold leading-[0.95] tracking-tight text-t1">
-            Studio<span className="text-pink/60">.</span>
-          </h1>
-          <p className="mt-3 max-w-xl text-[0.92rem] text-paper-dim leading-relaxed">
-            Generate a track or album. Pick the engine, write the prompt, hit go.
-          </p>
-        </div>
-        <div className="flex gap-8">
-          <Stat n={activeJobs.length} label="Active" highlight />
-          <Stat n={jobs.length} label="Total" />
-          <Stat n={sunoAlbums.length} label="Suno Albums" />
-        </div>
-      </div>
+      <PageHero
+        kicker="Studio / 2026"
+        title="Studio"
+        emphasis="workshop"
+        description="Generate a track or album. Pick the engine, write the prompt, hit go."
+        accent="pink"
+        stats={[
+          { label: "Active", value: activeJobs.length, highlight: true },
+          { label: "Total", value: jobs.length },
+          { label: "Suno Albums", value: sunoAlbums.length },
+        ]}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* LEFT — generate panel */}
@@ -303,22 +299,6 @@ export default function StudioPage() {
         )}
       </section>
     </PageShell>
-  );
-}
-
-function Stat({ n, label, highlight }: { n: number; label: string; highlight?: boolean }) {
-  return (
-    <div className="text-right">
-      <p className="label-mono">{label}</p>
-      <p
-        className={
-          "mt-1.5 font-mono font-bold tabular-nums text-[2.4rem] " +
-          (highlight && n > 0 ? "title-grad" : "text-t1")
-        }
-      >
-        {String(n).padStart(2, "0")}
-      </p>
-    </div>
   );
 }
 

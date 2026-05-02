@@ -3,16 +3,15 @@
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
-const STAGES: Array<{ key: "generating" | "mixing" | "ready" | "distributed"; label: string; icon: string; color: string }> = [
-  { key: "generating", label: "Generating", icon: "⚡", color: "text-pink" },
-  { key: "mixing", label: "Mixing", icon: "▦", color: "text-purple" },
-  { key: "ready", label: "Ready", icon: "✓", color: "text-green" },
-  { key: "distributed", label: "Distributed", icon: "📡", color: "text-cyan" },
+const STAGES: Array<{ key: "generating" | "mixing" | "ready" | "distributed"; label: string; dot: string }> = [
+  { key: "generating", label: "Generating", dot: "#ec4899" },
+  { key: "mixing", label: "Mixing", dot: "#8b5cf6" },
+  { key: "ready", label: "Ready", dot: "#34d399" },
+  { key: "distributed", label: "Distributed", dot: "#06b6d4" },
 ];
 
 export function PipelineStrip() {
   const tracks = useQuery(api.tracks.list, {}) ?? [];
-  const albums = useQuery(api.albums.list, {}) ?? [];
   const jobs = useQuery(api.jobs.list, {}) ?? [];
 
   const counts = {
@@ -22,46 +21,44 @@ export function PipelineStrip() {
     distributed: tracks.filter((t) => t.distributed).length,
   };
 
-  const totalCost = tracks.length * 0.025;
-  const monthlyEst = tracks.filter((t) => t.distributed).length * 2.25 + tracks.length * 0.6;
-
   return (
     <div
-      className="px-5 sm:px-8 lg:px-12 py-2 flex items-center gap-1 overflow-x-auto"
-      style={{ background: "linear-gradient(90deg, var(--color-bg2), rgba(14,17,24,0.95))", borderBottom: "1px solid var(--color-brd)" }}
+      className="border-b"
+      style={{ borderColor: "var(--color-rule-soft)", background: "rgba(10,12,18,0.4)" }}
     >
-      <div className="max-w-[1440px] mx-auto w-full flex items-center gap-1">
-        <div className="flex items-center gap-0 flex-1">
-          {STAGES.map((s, i) => (
-            <div key={s.key} className="flex items-center">
-              {i > 0 && <span className="text-t4 text-[0.65rem] px-1 shrink-0">→</span>}
-              <button className="flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-white/3 transition shrink-0">
-                <span className="text-[0.7rem] sm:text-[0.8rem]">{s.icon}</span>
-                <div className="text-left">
-                  <div className={"font-mono text-[0.85rem] sm:text-[0.95rem] font-bold leading-none " + s.color}>{counts[s.key]}</div>
-                  <div className="font-mono text-[0.5rem] uppercase tracking-[0.06em] text-t3 mt-0.5">{s.label}</div>
-                </div>
-              </button>
+      <div className="max-w-[1440px] mx-auto px-6 sm:px-8 lg:px-14 h-9 flex items-center gap-6 overflow-x-auto">
+        {STAGES.map((s, i) => {
+          const n = counts[s.key];
+          const dim = n === 0;
+          return (
+            <div key={s.key} className="flex items-center gap-3 shrink-0">
+              {i > 0 && <span className="text-paper-faint/60 text-[0.6rem]">·</span>}
+              <div className="flex items-center gap-2">
+                <span
+                  className={"w-1.5 h-1.5 rounded-full " + (s.key === "generating" && n > 0 ? "animate-pulse-dot" : "")}
+                  style={{ background: dim ? "rgba(148,163,184,0.25)" : s.dot }}
+                />
+                <span
+                  className={
+                    "font-mono text-[0.6rem] uppercase tracking-[0.22em] " +
+                    (dim ? "text-paper-faint" : "text-paper-dim")
+                  }
+                >
+                  {s.label}
+                </span>
+                <span
+                  className={
+                    "font-mono text-[0.66rem] tabular-nums leading-none " +
+                    (dim ? "text-paper-faint" : "text-paper")
+                  }
+                >
+                  {String(n).padStart(2, "0")}
+                </span>
+              </div>
             </div>
-          ))}
-        </div>
-
-        <div className="flex gap-4 ml-auto shrink-0">
-          <Stat value={tracks.length} label="Tracks" />
-          <Stat value={albums.length} label="Albums" />
-          <Stat value={"$" + totalCost.toFixed(0)} label="Cost" />
-          <Stat value={"$" + monthlyEst.toFixed(2)} label="Est. Monthly" gradient />
-        </div>
+          );
+        })}
       </div>
-    </div>
-  );
-}
-
-function Stat({ value, label, gradient }: { value: string | number; label: string; gradient?: boolean }) {
-  return (
-    <div className="text-right">
-      <div className={"font-mono text-[0.7rem] sm:text-[0.8rem] font-bold leading-none " + (gradient ? "title-grad" : "text-t1")}>{value}</div>
-      <div className="font-mono text-[0.45rem] uppercase tracking-[0.06em] text-t3 mt-1">{label}</div>
     </div>
   );
 }
