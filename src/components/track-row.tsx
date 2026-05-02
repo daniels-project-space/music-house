@@ -83,8 +83,10 @@ export function TrackRow({
   };
 
   const onDragStart = (e: React.DragEvent) => {
+    console.log("[mh-dragstart] track", trackId, title);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("application/x-mh-track", JSON.stringify({ trackId, artistSlug, albumSlug }));
+    e.dataTransfer.setData("text/plain", `track:${trackId}`);
   };
   const onDragOver = (e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes("application/x-mh-track")) return;

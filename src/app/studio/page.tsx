@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { PageHero, PageShell } from "@/components/page-hero";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import Link from "next/link";
@@ -87,23 +86,10 @@ export default function StudioPage() {
   };
 
   return (
-    <PageShell>
-      <PageHero
-        kicker="Studio / 2026"
-        title="Studio"
-        emphasis="workshop"
-        description="Generate a track or album. Pick the engine, write the prompt, hit go."
-        accent="pink"
-        stats={[
-          { label: "Active", value: activeJobs.length, highlight: true },
-          { label: "Total", value: jobs.length },
-          { label: "Suno Albums", value: sunoAlbums.length },
-        ]}
-      />
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <main className="px-5 sm:px-6 lg:px-8 pt-3 pb-32 animate-fi">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
         {/* LEFT — generate panel */}
-        <section className="lg:col-span-2 rounded-xl border border-brd bg-card/60 p-6 backdrop-blur">
+        <section className="lg:col-span-7 rounded-lg border border-brd bg-card p-4 backdrop-blur">
           <div className="flex items-center justify-between mb-5">
             <p className="label-mono">Generate</p>
             <div className="flex items-center gap-1 text-[0.55rem] font-mono text-t3">
@@ -194,7 +180,7 @@ export default function StudioPage() {
         </section>
 
         {/* RIGHT — Generation Queue */}
-        <aside className="rounded-xl border border-brd bg-card/60 p-6 backdrop-blur">
+        <aside className="lg:col-span-5 rounded-lg border border-brd bg-card p-4 backdrop-blur">
           <div className="flex items-center justify-between mb-5">
             <p className="label-mono">Queue</p>
             <span className="label-mono">{activeJobs.length} active</span>
@@ -229,13 +215,13 @@ export default function StudioPage() {
       </div>
 
       {/* Suno Albums sub-panel */}
-      <section className="mt-16">
-        <div className="flex items-baseline justify-between mb-7 pb-3" style={{ borderBottom: "1px solid rgba(236,72,153,0.35)" }}>
-          <div className="flex items-baseline gap-3">
-            <span className="text-[1.1rem] text-pink">◐</span>
-            <h2 className="font-display text-[1.55rem] font-semibold tracking-tight text-pink">Suno Album Builder</h2>
+      <section className="mt-7">
+        <div className="flex items-baseline justify-between mb-2 pb-1.5" style={{ borderBottom: "1px solid rgba(236,72,153,0.25)" }}>
+          <div className="flex items-baseline gap-2">
+            <span className="text-[0.95rem] text-pink leading-none">◐</span>
+            <h2 className="font-display text-[0.9rem] font-bold tracking-tight text-pink leading-none">Suno Album Builder</h2>
           </div>
-          <span className="label-mono">{sunoAlbums.length} albums · autocomplete to 10 each</span>
+          <span className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint">{sunoAlbums.length} alb · autocomplete to 10</span>
         </div>
 
         {sunoAlbums.length === 0 ? (
@@ -298,7 +284,7 @@ export default function StudioPage() {
           </div>
         )}
       </section>
-    </PageShell>
+    </main>
   );
 }
 

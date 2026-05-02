@@ -5,15 +5,14 @@ import { useMutation, useQuery } from "convex/react";
 import { useSearchParams } from "next/navigation";
 import { api } from "../../../convex/_generated/api";
 import { AlbumCard } from "@/components/album-card";
-import { PageHero, PageShell } from "@/components/page-hero";
 import { useResolvedUrls } from "@/components/url-cache-provider";
 import { TrackRow, useHeartedSet } from "@/components/track-row";
 import type { PlayerTrack } from "@/components/player-context";
 
 const SECTIONS: Array<{ key: string; label: string; icon: string; accent: string; rule: string }> = [
-  { key: "film_cinematic", label: "Film & Cinematic", icon: "▲", accent: "#ef4444", rule: "rgba(239,68,68,0.35)" },
-  { key: "artist_songs", label: "Artist Songs", icon: "♢", accent: "#8b5cf6", rule: "rgba(139,92,246,0.35)" },
-  { key: "gaming", label: "Gaming", icon: "◎", accent: "#34d399", rule: "rgba(52,211,153,0.35)" },
+  { key: "film_cinematic", label: "Film & Cinematic", icon: "🎬", accent: "#ef4444", rule: "rgba(239,68,68,0.25)" },
+  { key: "artist_songs", label: "Artist Songs", icon: "🎤", accent: "#8b5cf6", rule: "rgba(139,92,246,0.25)" },
+  { key: "gaming", label: "Gaming", icon: "🎮", accent: "#34d399", rule: "rgba(52,211,153,0.25)" },
 ];
 
 export default function LibraryPage() {
@@ -24,7 +23,16 @@ export default function LibraryPage() {
   const sp = useSearchParams();
   const stage = sp?.get("stage");
 
-  // Bulk-prefetch every album cover in one shot (cached). Player URLs not needed here.
+  const [genreFilter, setGenreFilter] = useState("");
+  const [artistFilter, setArtistFilter] = useState("");
+  const [heartedOnly, setHeartedOnly] = useState(false);
+
+  const genres = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of tracks) if (t.genre) set.add(t.genre);
+    return Array.from(set).sort();
+  }, [tracks]);
+
   const coverKeys = useMemo(() => albums.map((a) => a.coverKey).filter((k): k is string => !!k), [albums]);
   useResolvedUrls(coverKeys);
 
@@ -39,6 +47,7 @@ export default function LibraryPage() {
   const sunoStaging: AlbumDoc[] = [];
   const otherUnsorted: AlbumDoc[] = [];
   for (const a of albums) {
+    if (artistFilter && a.artistSlug !== artistFilter) continue;
     if (a.artistSlug === "_suno") { sunoStaging.push(a); continue; }
     const sec = (a as { section?: string }).section;
     if (sec && SECTIONS.some((s) => s.key === sec)) {
@@ -48,39 +57,55 @@ export default function LibraryPage() {
     }
   }
 
-  // Unsorted FLAT TRACKS — tracks whose album is _unsorted/_singles or has no albumSlug
   const unsortedTracks = useMemo(() => {
     let list = tracks.filter((t) => !t.albumSlug || t.albumSlug === "_singles" || t.albumSlug === "_unsorted");
+    if (artistFilter) list = list.filter((t) => t.artistSlug === artistFilter);
+    if (genreFilter) list = list.filter((t) => t.genre === genreFilter);
+    if (heartedOnly) list = list.filter((t) => hearted.has(t._id));
     if (stage === "ready") list = list.filter((t) => !t.distributed && !t.archivedAt);
     if (stage === "distributed") list = list.filter((t) => t.distributed);
     if (stage === "mixing") list = list.filter((t) => !t.distributed && !t.archivedAt && (t.rating ?? 0) >= 4);
     return list.slice(0, 80);
-  }, [tracks, stage]);
+  }, [tracks, stage, artistFilter, genreFilter, heartedOnly, hearted]);
 
   return (
-    <PageShell>
-      <PageHero
-        kicker="Library"
-        title="Catalog"
-        description="Drag rows to reorder, drop tracks on albums to move, drag albums between sections."
-        accent="purple"
-        stats={[
-          { label: "Artists", value: artists.length },
-          { label: "Albums", value: albums.length },
-          { label: "Tracks", value: tracks.length, highlight: true },
-        ]}
-      />
-
-      {stage && (
-        <div className="my-4 flex items-center gap-3">
-          <span className="font-mono text-[0.55rem] uppercase tracking-[0.2em] text-paper-faint">Filter</span>
-          <span className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-pink px-2 py-0.5 rounded-full border border-pink/30 bg-pink/5">
-            {stage}
+    <main className="px-5 sm:px-6 lg:px-8 pt-3 pb-32 animate-fi">
+      {/* Filter bar — legacy .fb */}
+      <div className="flex items-center gap-2 flex-wrap mb-3">
+        <select
+          className="fselect"
+          value={genreFilter}
+          onChange={(e) => setGenreFilter(e.target.value)}
+        >
+          <option value="">All genres</option>
+          {genres.map((g) => <option key={g} value={g}>{g}</option>)}
+        </select>
+        <select
+          className="fselect"
+          value={artistFilter}
+          onChange={(e) => setArtistFilter(e.target.value)}
+        >
+          <option value="">All artists</option>
+          {artists.map((a) => <option key={a._id} value={a.slug}>{a.name}</option>)}
+        </select>
+        <button
+          className={"fbtn " + (heartedOnly ? "on" : "")}
+          onClick={() => setHeartedOnly((v) => !v)}
+        >
+          ♥ Hearted
+        </button>
+        {stage && (
+          <span className="fbtn on flex items-center gap-2" style={{ borderColor: "rgba(236,72,153,0.5)" }}>
+            <span className="font-mono uppercase">stage: {stage}</span>
+            <a href="/library" className="font-mono text-paper-faint hover:text-paper">×</a>
           </span>
-          <a href="/library" className="font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint hover:text-paper transition-colors">clear ×</a>
-        </div>
-      )}
-      <div className="pt-6 space-y-10">
+        )}
+        <span className="ml-auto font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint">
+          {tracks.length} trk · {albums.length} alb · {artists.length} artists
+        </span>
+      </div>
+
+      <div className="space-y-7">
         {SECTIONS.map((s) => {
           const list = bySection[s.key] ?? [];
           return (
@@ -92,7 +117,6 @@ export default function LibraryPage() {
               accent={s.accent}
               rule={s.rule}
               count={list.length}
-              hideIfEmpty={list.length === 0}
             >
               <Grid albums={list} tracksByAlbum={tracksByAlbum} />
             </Section>
@@ -100,13 +124,13 @@ export default function LibraryPage() {
         })}
 
         {sunoStaging.length > 0 && (
-          <Section label="Suno Staging" icon="◐" accent="#ec4899" rule="rgba(236,72,153,0.35)" count={sunoStaging.length}>
+          <Section label="Suno Staging" icon="◐" accent="#ec4899" rule="rgba(236,72,153,0.25)" count={sunoStaging.length}>
             <Grid albums={sunoStaging} tracksByAlbum={tracksByAlbum} />
           </Section>
         )}
 
         {otherUnsorted.length > 0 && (
-          <Section label="Other" icon="◯" accent="#94a3b8" rule="rgba(148,163,184,0.3)" count={otherUnsorted.length}>
+          <Section label="Other" icon="◯" accent="#94a3b8" rule="rgba(148,163,184,0.2)" count={otherUnsorted.length}>
             <Grid albums={otherUnsorted} tracksByAlbum={tracksByAlbum} />
           </Section>
         )}
@@ -115,7 +139,7 @@ export default function LibraryPage() {
           <UnsortedTracks tracks={unsortedTracks} hearted={hearted} />
         )}
       </div>
-    </PageShell>
+    </main>
   );
 }
 
@@ -126,7 +150,6 @@ function Section({
   accent,
   rule,
   count,
-  hideIfEmpty,
   children,
 }: {
   sectionKey?: string;
@@ -135,7 +158,6 @@ function Section({
   accent: string;
   rule: string;
   count: number;
-  hideIfEmpty?: boolean;
   children: React.ReactNode;
 }) {
   const setSection = useMutation(api.albums.setSection);
@@ -144,7 +166,7 @@ function Section({
 
   const onDragOver = (e: React.DragEvent) => {
     if (!isDropTarget) return;
-    if (!e.dataTransfer.types.includes("application/x-mh-album")) return;
+    if (!Array.from(e.dataTransfer.types ?? []).includes("application/x-mh-album")) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     setHover(true);
@@ -162,27 +184,31 @@ function Section({
     } catch {}
   };
 
-  if (hideIfEmpty && count === 0 && !isDropTarget) return null;
-
   return (
     <section
       onDragOver={onDragOver}
       onDragLeave={() => setHover(false)}
       onDrop={onDrop}
-      className={hover ? "ring-2 ring-offset-4 ring-offset-bg rounded-2xl transition-all" : "transition-all"}
-      style={hover ? { boxShadow: `0 0 0 2px ${accent}, 0 0 32px ${rule}` } : undefined}
+      className={"transition-all " + (hover ? "rounded-lg" : "")}
+      style={hover ? { boxShadow: `inset 0 0 0 2px ${accent}, 0 0 32px ${rule}`, padding: "0.5rem" } : undefined}
     >
-      <div className="flex items-baseline justify-between mb-3 pb-2" style={{ borderBottom: `1px solid ${rule}` }}>
-        <div className="flex items-baseline gap-2.5">
-          <span style={{ color: accent }} className="text-[0.9rem] leading-none">{icon}</span>
-          <h2 className="font-display text-[0.95rem] font-bold tracking-tight leading-none" style={{ color: accent }}>{label}</h2>
-          {isDropTarget && count === 0 && (
-            <span className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint">drop here</span>
-          )}
+      <div className="flex items-baseline justify-between mb-2 pb-1.5" style={{ borderBottom: `1px solid ${rule}` }}>
+        <div className="flex items-baseline gap-2">
+          <span style={{ color: accent }} className="text-[0.95rem] leading-none">{icon}</span>
+          <h2 className="font-display text-[0.9rem] font-bold tracking-tight leading-none" style={{ color: accent }}>{label}</h2>
         </div>
-        <span className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint">{count} alb</span>
+        <span className="font-mono text-[0.5rem] uppercase tracking-[0.16em] text-paper-faint">{count} alb</span>
       </div>
-      {count > 0 && children}
+      {count > 0 ? (
+        children
+      ) : (
+        <div
+          className="border border-dashed rounded-md py-6 text-center font-mono text-[0.55rem] uppercase tracking-[0.2em] text-paper-faint/60"
+          style={{ borderColor: rule }}
+        >
+          drag albums here
+        </div>
+      )}
     </section>
   );
 }
@@ -225,7 +251,6 @@ function UnsortedTracks({
   }>;
   hearted: Set<string>;
 }) {
-  // bulk presign all audio keys so play is instant
   const keys = useMemo(() => tracks.map((t) => t.audioKey), [tracks]);
   useResolvedUrls(keys);
   const queue: PlayerTrack[] = tracks.map((t) => ({
@@ -238,14 +263,15 @@ function UnsortedTracks({
 
   return (
     <section>
-      <div className="flex items-baseline justify-between mb-3 pb-2" style={{ borderBottom: "1px solid rgba(251,191,36,0.35)" }}>
-        <div className="flex items-baseline gap-2.5">
-          <span className="text-[0.9rem] text-amber leading-none">◯</span>
-          <h2 className="font-display text-[0.95rem] font-bold tracking-tight text-amber leading-none">Unsorted</h2>
+      <div className="flex items-baseline justify-between mb-2 pb-1.5" style={{ borderBottom: "1px solid rgba(251,191,36,0.25)" }}>
+        <div className="flex items-baseline gap-2">
+          <span className="text-[0.95rem] text-amber leading-none">◯</span>
+          <h2 className="font-display text-[0.9rem] font-bold tracking-tight text-amber leading-none">Unsorted</h2>
+          <span className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint ml-1">drop on an album to organise</span>
         </div>
-        <span className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint">{tracks.length} trk</span>
+        <span className="font-mono text-[0.5rem] uppercase tracking-[0.16em] text-paper-faint">{tracks.length} trk</span>
       </div>
-      <div className="rounded-md border border-brd bg-card/50 backdrop-blur p-1.5">
+      <div className="rounded-md border border-brd bg-card/50 backdrop-blur p-1">
         {tracks.map((t, i) => (
           <TrackRow
             key={t._id}

@@ -250,3 +250,60 @@ a { color: var(--color-purple); text-decoration: none; }
 
 .drag-above { box-shadow: inset 0 2px 0 0 var(--color-purple); }
 .drag-below { box-shadow: inset 0 -2px 0 0 var(--color-purple); }
+
+@keyframes vinyl-glow {
+  0%, 100% { box-shadow: 0 0 0 2px #2a2a3a, 0 0 14px rgba(139, 92, 246, 0.22); }
+  50% { box-shadow: 0 0 0 2px #38384a, 0 0 22px rgba(236, 72, 153, 0.34), 0 0 44px rgba(236, 72, 153, 0.08); }
+}
+.animate-vinyl-glow { animation: vinyl-glow 3s ease-in-out infinite; }
+
+@keyframes np-bar {
+  0%, 100% { height: 30%; }
+  50% { height: 100%; }
+}
+.np-bars { display: flex; align-items: flex-end; gap: 2px; height: 14px; }
+.np-bars span {
+  width: 2.5px;
+  background: linear-gradient(180deg, #ec4899, #8b5cf6);
+  border-radius: 1px;
+  animation: np-bar 0.8s ease infinite;
+}
+.np-bars span:nth-child(1) { animation-delay: 0s; height: 60%; }
+.np-bars span:nth-child(2) { animation-delay: 0.15s; height: 100%; }
+.np-bars span:nth-child(3) { animation-delay: 0.3s; height: 40%; }
+.np-bars span:nth-child(4) { animation-delay: 0.1s; height: 80%; }
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+.animate-pulse-soft { animation: pulse-soft 2.2s ease-in-out infinite; }
+
+/* Legacy filter bar buttons */
+.fbtn {
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  padding: 0.28rem 0.6rem;
+  background: transparent;
+  border: 1px solid var(--color-brd);
+  border-radius: 6px;
+  color: var(--color-t2);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.fbtn:hover { border-color: var(--color-purple); color: var(--color-t1); }
+.fbtn.on { border-color: var(--color-pink); color: var(--color-pink); background: rgba(236, 72, 153, 0.06); }
+
+.fselect {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  padding: 0.28rem 0.5rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-brd);
+  border-radius: 6px;
+  color: var(--color-t1);
+  outline: none;
+  cursor: pointer;
+}
+.fselect:focus { border-color: var(--color-purple); }

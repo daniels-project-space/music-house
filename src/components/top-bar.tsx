@@ -30,20 +30,23 @@ export function TopBar() {
 
   return (
     <header
-      className="sticky top-0 z-30 backdrop-blur-xl"
+      className="backdrop-blur-xl"
       style={{
-        background: "linear-gradient(180deg, rgba(10,12,18,0.85), rgba(10,12,18,0.7))",
+        background: "linear-gradient(180deg, rgba(10,12,18,0.92), rgba(10,12,18,0.78))",
         borderBottom: "1px solid var(--color-brd)",
       }}
     >
-      <div className="max-w-[1600px] mx-auto px-5 sm:px-8 lg:px-12 h-16 flex items-center gap-3 sm:gap-6 lg:gap-8">
-        <Link href="/library" className="shrink-0 leading-none group/logo">
-          <span className="font-display text-[1.02rem] sm:text-[1.08rem] font-bold tracking-[-0.01em] text-paper transition-colors group-hover/logo:text-pink">
+      <div className="px-5 sm:px-6 lg:px-8 h-14 flex items-center gap-4 sm:gap-6">
+        <Link href="/library" className="flex flex-col shrink-0 leading-none">
+          <span className="font-display text-[1.05rem] sm:text-[1.1rem] font-extrabold tracking-[-0.02em] title-grad">
             Music House
+          </span>
+          <span className="hidden sm:block font-mono text-[0.5rem] uppercase tracking-[0.16em] text-paper-faint mt-1">
+            Suno V5.5 · Mureka V8 · Distrokid
           </span>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-1 ml-2">
+        <nav className="hidden md:flex items-center gap-0.5 ml-2">
           {TABS.map((t) => {
             const active = isActive(t.href);
             return (
@@ -51,8 +54,8 @@ export function TopBar() {
                 key={t.slug}
                 href={t.href}
                 className={
-                  "relative px-3 lg:px-4 py-2 text-[0.74rem] lg:text-[0.78rem] font-display font-semibold rounded-md transition-colors " +
-                  (active ? "tab-active" : "text-t3 hover:text-t1")
+                  "relative px-3 lg:px-3.5 py-1.5 text-[0.74rem] lg:text-[0.78rem] font-display font-semibold rounded-md transition-colors " +
+                  (active ? "tab-active" : "text-paper-dim hover:text-paper hover:bg-purple/[0.05]")
                 }
               >
                 {t.label}
@@ -61,12 +64,12 @@ export function TopBar() {
           })}
         </nav>
 
-        <div className="ml-auto flex items-center gap-3 sm:gap-5">
+        <div className="ml-auto flex items-center gap-3 sm:gap-4">
           <label
             className="hidden sm:flex relative items-center"
             style={{ width: focused || q ? 280 : 200, transition: "width 0.32s cubic-bezier(0.2,0.8,0.2,1)" }}
           >
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-t3 text-[0.85rem] pointer-events-none">⌕</span>
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-paper-faint text-[0.78rem] pointer-events-none">⌕</span>
             <input
               type="text"
               value={q}
@@ -74,7 +77,7 @@ export function TopBar() {
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
               placeholder="Search tracks, albums…"
-              className="font-mono text-[0.7rem] pl-8 pr-3 h-8 w-full rounded-md border outline-none bg-surface/80 transition-colors text-t1 placeholder:text-t3/70"
+              className="font-mono text-[0.66rem] pl-7 pr-3 h-7 w-full rounded-md border outline-none bg-surface/80 transition-colors text-paper placeholder:text-paper-faint/70"
               style={{ borderColor: focused || q ? "rgba(236,72,153,0.45)" : "var(--color-brd)" }}
             />
           </label>
@@ -83,7 +86,7 @@ export function TopBar() {
             href="https://project-hub-olive-pi.vercel.app"
             target="_blank"
             rel="noreferrer"
-            className="hidden sm:flex font-mono text-[0.65rem] uppercase tracking-[0.22em] text-t3 hover:text-amber transition-colors items-center gap-1.5"
+            className="hidden sm:flex font-mono text-[0.6rem] uppercase tracking-[0.22em] text-paper-faint hover:text-amber transition-colors items-center gap-1.5"
           >
             <span className="w-1 h-1 rounded-full bg-amber/60" />
             Hub
@@ -92,7 +95,7 @@ export function TopBar() {
           <button
             type="button"
             onClick={() => setMenuOpen((o) => !o)}
-            className="md:hidden w-9 h-9 grid place-items-center rounded-md border border-brd text-t2 hover:text-t1 hover:border-brd-a transition-colors"
+            className="md:hidden w-9 h-9 grid place-items-center rounded-md border border-brd text-paper-dim hover:text-paper hover:border-brd-a transition-colors"
             aria-label="Menu"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -104,7 +107,7 @@ export function TopBar() {
 
       {menuOpen && (
         <div className="md:hidden border-t border-brd bg-bg2/95 backdrop-blur-xl animate-fi">
-          <nav className="max-w-[1600px] mx-auto px-5 py-3 flex flex-col gap-1">
+          <nav className="px-5 py-3 flex flex-col gap-1">
             {TABS.map((t) => {
               const active = isActive(t.href);
               return (
@@ -113,7 +116,7 @@ export function TopBar() {
                   href={t.href}
                   className={
                     "px-3 py-2.5 rounded-md font-display text-[0.92rem] font-semibold transition-colors " +
-                    (active ? "bg-pink/[0.08] text-pink" : "text-t2 hover:bg-paper/[0.025] hover:text-t1")
+                    (active ? "bg-pink/[0.08] text-pink" : "text-paper-dim hover:bg-paper/[0.025] hover:text-paper")
                   }
                 >
                   {t.label}

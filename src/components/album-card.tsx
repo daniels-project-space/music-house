@@ -1,5 +1,5 @@
 "use client";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useMutation } from "convex/react";
 import { useUrlCache } from "./url-cache-provider";
@@ -17,51 +17,84 @@ type Props = {
 };
 
 export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, section }: Props) {
+  const router = useRouter();
   const { get } = useUrlCache();
   const coverUrl = coverKey ? get(coverKey) : undefined;
   const moveTrack = useMutation(api.tracks.move);
   const [trackOver, setTrackOver] = useState(false);
+  const href = `/library/${artist}/${slug}`;
 
   const onDragStart = (e: React.DragEvent) => {
     if (!albumId) return;
+    e.stopPropagation();
+    try {
+      e.dataTransfer.clearData();
+    } catch {}
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("application/x-mh-album", JSON.stringify({ albumId, section }));
+    e.dataTransfer.setData("text/plain", `album:${albumId}`);
   };
 
   const onDragOver = (e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes("application/x-mh-track")) {
+    const types = Array.from(e.dataTransfer.types ?? []);
+    if (types.includes("application/x-mh-track")) {
       e.preventDefault();
+      e.stopPropagation();
       e.dataTransfer.dropEffect = "move";
       setTrackOver(true);
     }
   };
   const onDragLeave = () => setTrackOver(false);
   const onDrop = async (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes("application/x-mh-track")) return;
+    const types = Array.from(e.dataTransfer.types ?? []);
+    console.log("[mh-drop]", types, "on", artist, slug);
+    if (!types.includes("application/x-mh-track")) return;
     e.preventDefault();
+    e.stopPropagation();
     setTrackOver(false);
     const raw = e.dataTransfer.getData("application/x-mh-track");
+    console.log("[mh-drop] raw:", raw);
     if (!raw) return;
     try {
       const data = JSON.parse(raw) as { trackId: Id<"tracks">; artistSlug: string; albumSlug?: string };
-      if (data.artistSlug === artist && data.albumSlug === slug) return;
+      if (data.artistSlug === artist && data.albumSlug === slug) {
+        console.log("[mh-drop] same album, skip");
+        return;
+      }
+      console.log("[mh-drop] calling moveTrack", data.trackId, "→", artist, slug);
       await moveTrack({ id: data.trackId, targetArtistSlug: artist, targetAlbumSlug: slug });
-    } catch {}
+      console.log("[mh-drop] moveTrack done");
+    } catch (err) {
+      console.error("[mh-drop] err:", err);
+    }
+  };
+
+  const onClick = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey) return;
+    router.push(href);
   };
 
   return (
-    <Link
-      href={`/library/${artist}/${slug}`}
+    <div
+      role="link"
+      tabIndex={0}
       draggable={!!albumId}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") router.push(href);
+      }}
+      data-album-id={albumId ?? ""}
+      data-album-href={href}
       className={
-        "group block rounded-lg overflow-hidden bg-card border card-hover relative " +
-        (trackOver ? "ring-2 ring-pink/60 scale-[1.02]" : "")
+        "album-card group block rounded-lg overflow-hidden bg-card border card-hover relative cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-pink/60 " +
+        (trackOver ? "ring-2 ring-pink scale-[1.03]" : "")
       }
-      style={{ borderColor: trackOver ? "rgba(236,72,153,0.6)" : "var(--color-brd)" }}
+      style={{ borderColor: trackOver ? "rgba(236,72,153,0.7)" : "var(--color-brd)" }}
     >
       <div className="relative aspect-square">
         {coverUrl ? (
@@ -70,7 +103,8 @@ export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, s
             src={coverUrl}
             alt={name}
             loading="lazy"
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            draggable={false}
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 pointer-events-none"
           />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-[#1e293b] via-[#0f172a] to-[#0a0c12] grid place-items-center text-4xl text-t4/60">
@@ -90,18 +124,18 @@ export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, s
           </div>
         </div>
         <span
-          className="absolute bottom-1.5 right-1.5 font-mono text-[0.5rem] px-1.5 py-[1px] rounded backdrop-blur tabular-nums"
+          className="absolute bottom-1.5 right-1.5 font-mono text-[0.5rem] px-1.5 py-[1px] rounded backdrop-blur tabular-nums pointer-events-none"
           style={{ background: "rgba(5,6,8,0.7)", color: "#94a3b8" }}
         >
           {trackCount} trk
         </span>
         {trackOver && (
-          <div className="absolute inset-0 grid place-items-center pointer-events-none" style={{ background: "rgba(236,72,153,0.18)" }}>
-            <span className="font-mono text-[0.6rem] uppercase tracking-[0.2em] text-pink font-bold">drop</span>
+          <div className="absolute inset-0 grid place-items-center pointer-events-none" style={{ background: "rgba(236,72,153,0.22)" }}>
+            <span className="font-mono text-[0.6rem] uppercase tracking-[0.2em] text-pink font-bold">drop here</span>
           </div>
         )}
       </div>
-      <div className="px-2.5 py-2">
+      <div className="px-2.5 py-2 pointer-events-none">
         <h3 className="font-display text-[0.82rem] font-semibold tracking-tight truncate text-paper leading-tight">
           {name}
         </h3>
@@ -109,6 +143,6 @@ export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, s
           {artist}
         </p>
       </div>
-    </Link>
+    </div>
   );
 }

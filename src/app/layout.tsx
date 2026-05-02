@@ -6,6 +6,7 @@ import { TopBar } from "@/components/top-bar";
 import { PipelineStrip } from "@/components/pipeline-strip";
 import { UrlCacheProvider } from "@/components/url-cache-provider";
 import { GlobalUrlPrefetch } from "@/components/global-url-prefetch";
+import { DragAutoScroll } from "@/components/drag-autoscroll";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -28,8 +29,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <UrlCacheProvider>
             <PlayerProvider>
               <GlobalUrlPrefetch />
-              <TopBar />
-              <PipelineStrip />
+              <DragAutoScroll />
+              <div className="sticky top-0 z-30">
+                <TopBar />
+                <PipelineStrip />
+              </div>
               {children}
               <Player />
             </PlayerProvider>
