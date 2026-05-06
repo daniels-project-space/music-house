@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import Link from "next/link";
@@ -12,7 +13,7 @@ const STAGES: Array<{ key: "generating" | "mixing" | "ready" | "distributed"; la
   { key: "distributed", label: "Distributed", icon: "📡", color: "#06b6d4", target: "/distribution" },
 ];
 
-export function PipelineStrip() {
+function PipelineStripInner() {
   const tracks = useQuery(api.tracks.list, {}) ?? [];
   const albums = useQuery(api.albums.list, {}) ?? [];
   const jobs = useQuery(api.jobs.list, {}) ?? [];
@@ -109,5 +110,13 @@ function Stat({ value, label, gradient }: { value: string | number; label: strin
         {label}
       </div>
     </div>
+  );
+}
+
+export function PipelineStrip() {
+  return (
+    <Suspense fallback={<div className="h-9 border-b" style={{ borderColor: "var(--color-brd)" }} />}>
+      <PipelineStripInner />
+    </Suspense>
   );
 }

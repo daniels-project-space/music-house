@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, Suspense } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useSearchParams } from "next/navigation";
 import { api } from "../../../convex/_generated/api";
@@ -15,7 +15,7 @@ const SECTIONS: Array<{ key: string; label: string; icon: string; accent: string
   { key: "gaming", label: "Gaming", icon: "🎮", accent: "#34d399", rule: "rgba(52,211,153,0.25)" },
 ];
 
-export default function LibraryPage() {
+function LibraryInner() {
   const albums = useQuery(api.albums.list, {}) ?? [];
   const tracks = useQuery(api.tracks.list, {}) ?? [];
   const artists = useQuery(api.artists.list, {}) ?? [];
@@ -290,5 +290,13 @@ function UnsortedTracks({
         ))}
       </div>
     </section>
+  );
+}
+
+export default function LibraryPage() {
+  return (
+    <Suspense fallback={<main className="px-5 sm:px-6 lg:px-8 pt-3 pb-32"><p className="font-mono text-[0.6rem] uppercase tracking-[0.2em] text-paper-faint">loading…</p></main>}>
+      <LibraryInner />
+    </Suspense>
   );
 }
