@@ -159,11 +159,11 @@ export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, s
           </div>
         )}
       </div>
-      <div className="px-2.5 py-2 pointer-events-none">
+      <div className="px-3 pt-2.5 pb-3 pointer-events-none">
         <h3 className="font-display text-[0.82rem] font-semibold tracking-tight truncate text-paper leading-tight">
           {name}
         </h3>
-        <p className="mt-0.5 font-mono text-[0.55rem] uppercase tracking-[0.1em] text-amber/80 truncate">
+        <p className="mt-1 font-mono text-[0.55rem] uppercase tracking-[0.14em] text-amber/70 truncate">
           {artist}
         </p>
       </div>

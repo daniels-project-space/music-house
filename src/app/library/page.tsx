@@ -105,7 +105,7 @@ function LibraryInner() {
         </span>
       </div>
 
-      <div className="space-y-12">
+      <div className="space-y-16">
         {SECTIONS.map((s) => {
           const list = bySection[s.key] ?? [];
           return (
@@ -217,7 +217,7 @@ function Grid({ albums, tracksByAlbum }: { albums: { _id: string; artistSlug: st
   return (
     <div
       className="grid"
-      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "1.5rem" }}
+      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "2rem 1.75rem" }}
     >
       {albums.map((a) => (
         <AlbumCard
