@@ -67,6 +67,24 @@ export const setComplete = mutation({
     ctx.db.patch(id, { completedAt: completed ? Date.now() : undefined }),
 });
 
+export const removeAndOrphan = mutation({
+  args: { id: v.id("albums") },
+  handler: async (ctx, { id }) => {
+    const album = await ctx.db.get(id);
+    if (!album) return;
+    const tracks = await ctx.db
+      .query("tracks")
+      .withIndex("by_artist_album", (q) =>
+        q.eq("artistSlug", album.artistSlug).eq("albumSlug", album.slug)
+      )
+      .collect();
+    for (const t of tracks) {
+      await ctx.db.patch(t._id, { albumSlug: undefined });
+    }
+    await ctx.db.delete(id);
+  },
+});
+
 export const remove = mutation({
   args: { id: v.id("albums") },
   handler: async (ctx, { id }) => ctx.db.delete(id),

@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { ConvexClientProvider } from "@/components/convex-provider";
 import { Player } from "@/components/player";
 import { PlayerProvider } from "@/components/player-context";
-import { TopBar } from "@/components/top-bar";
-import { PipelineStrip } from "@/components/pipeline-strip";
+import { Sidebar } from "@/components/sidebar";
 import { UrlCacheProvider } from "@/components/url-cache-provider";
 import { GlobalUrlPrefetch } from "@/components/global-url-prefetch";
 import { DragAutoScroll } from "@/components/drag-autoscroll";
@@ -24,17 +23,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen flex flex-col">
+      <body className="min-h-screen">
         <ConvexClientProvider>
           <UrlCacheProvider>
             <PlayerProvider>
               <GlobalUrlPrefetch />
               <DragAutoScroll />
-              <div className="sticky top-0 z-30">
-                <TopBar />
-                <PipelineStrip />
+              <div className="flex min-h-screen">
+                <Sidebar />
+                <div className="flex-1 min-w-0 flex flex-col">
+                  {children}
+                </div>
               </div>
-              <div className="flex-1">{children}</div>
               <Player />
             </PlayerProvider>
           </UrlCacheProvider>

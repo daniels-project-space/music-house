@@ -34,7 +34,7 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
 
   if (!tracks || !albumRow) {
     return (
-      <main className="px-5 sm:px-6 lg:px-8 pt-3 pb-32">
+      <main className="px-6 sm:px-10 lg:px-14 pt-6 pb-32">
         <p className="font-mono text-[0.6rem] uppercase tracking-[0.2em] text-paper-faint">loading…</p>
       </main>
     );
@@ -60,6 +60,8 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
   };
 
   const totalDuration = sorted.reduce((s, t) => s + (t.duration ?? 0), 0);
+  const durMin = Math.round(totalDuration / 60);
+  const isPlayingThis = !!(current && queue.find((q) => q.id === current.id));
   const distributedCount = sorted.filter((t) => (t as { distributed?: boolean }).distributed).length;
   const allDistributed = distributedCount > 0 && distributedCount === sorted.length;
   const isComplete = !!(albumRow as { completedAt?: number }).completedAt;
@@ -73,8 +75,6 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
   const toggleComplete = async () => {
     try { await setComplete({ id: albumRow._id, completed: !isComplete }); } catch {}
   };
-  const durMin = Math.round(totalDuration / 60);
-  const isPlayingThis = !!(current && queue.find((q) => q.id === current.id));
 
   const lyricsTrack = lyricsTrackId
     ? sorted.find((t) => t._id === lyricsTrackId)
@@ -83,48 +83,50 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
       : null;
 
   return (
-    <main className="px-5 sm:px-6 lg:px-8 pt-3 pb-32 animate-fi">
+    <main className="px-6 sm:px-10 lg:px-14 pt-6 pb-32 animate-fi">
       <Link
         href="/library"
-        className="inline-flex items-center gap-2 font-mono text-[0.55rem] uppercase tracking-[0.2em] text-paper-faint hover:text-amber transition-colors mb-3"
+        className="inline-flex items-center gap-2 font-mono text-[0.55rem] uppercase tracking-[0.22em] text-paper-faint hover:text-amber transition-colors mb-10"
       >
-        ← Back to Albums
+        ← Library
       </Link>
 
-      {/* AHDR — legacy album header: cover left, meta + actions right (horizontal) */}
-      <div
-        className="relative rounded-lg border border-brd bg-card overflow-hidden mb-4"
-        style={{
-          backgroundImage: coverUrl ? `linear-gradient(180deg, rgba(5,6,8,0.85), rgba(5,6,8,0.96)), url(${coverUrl})` : undefined,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
-      >
-        <div className="flex gap-5 p-5 backdrop-blur-md">
+      <div className="flex flex-col lg:flex-row gap-10 lg:gap-14 items-start mb-14">
+        <div className="shrink-0 w-full lg:w-[280px]">
           <div
             className={
-              "w-[200px] h-[200px] rounded-md overflow-hidden bg-surface shrink-0 ring-1 ring-paper/10 " +
+              "relative aspect-square rounded-md overflow-hidden bg-surface ring-1 ring-paper/10 transition-transform " +
               (isPlayingThis ? "animate-cover-pulse" : "")
             }
+            style={{ boxShadow: "0 24px 60px -20px rgba(0,0,0,0.7), 0 8px 24px -8px rgba(236,72,153,0.12)" }}
           >
             {coverUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={coverUrl} alt={albumRow.name} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full grid place-items-center text-5xl text-paper-faint/40">♪</div>
+              <div className="w-full h-full grid place-items-center text-6xl text-paper-faint/30">♪</div>
             )}
           </div>
+        </div>
 
-          <div className="flex-1 min-w-0 flex flex-col">
-            <div className="flex items-center gap-2 mb-2">
+        <div className="flex-1 min-w-0 flex flex-col gap-6 pt-1">
+          <div>
+            <div className="flex items-center gap-2 mb-4">
               {albumRow.section && (
-                <span className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-amber/85 px-1.5 py-0.5 rounded border border-amber/30">
+                <span className="font-mono text-[0.5rem] uppercase tracking-[0.2em] text-amber/85 px-2 py-0.5 rounded-full border border-amber/30">
                   {albumRow.section.replace(/_/g, " ")}
                 </span>
               )}
-              <span className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint">
-                {artist} · {sorted.length} trk · {durMin} min
-              </span>
+              {isComplete && (
+                <span className="font-mono text-[0.5rem] uppercase tracking-[0.2em] text-green/85 px-2 py-0.5 rounded-full border border-green/30">
+                  ✓ complete
+                </span>
+              )}
+              {allDistributed && (
+                <span className="font-mono text-[0.5rem] uppercase tracking-[0.2em] text-cyan/85 px-2 py-0.5 rounded-full border border-cyan/30">
+                  📡 distributed
+                </span>
+              )}
             </div>
 
             {editingName ? (
@@ -143,11 +145,11 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
                   if (e.key === "Escape") setEditingName(false);
                 }}
                 autoFocus
-                className="font-display text-[1.5rem] sm:text-[1.75rem] font-extrabold leading-[1.05] tracking-tight text-paper bg-transparent outline-none border-b border-pink/40 mb-2"
+                className="w-full font-display text-[2.4rem] sm:text-[2.8rem] lg:text-[3.2rem] font-extrabold leading-[0.98] tracking-[-0.02em] text-paper bg-transparent outline-none border-b border-pink/40 pb-1"
               />
             ) : (
               <h1
-                className="font-display text-[1.5rem] sm:text-[1.75rem] font-extrabold leading-[1.05] tracking-tight text-paper cursor-text mb-2"
+                className="font-display text-[2.4rem] sm:text-[2.8rem] lg:text-[3.2rem] font-extrabold leading-[0.98] tracking-[-0.02em] text-paper cursor-text"
                 onDoubleClick={() => { setDraftName(albumRow.name); setEditingName(true); }}
                 title="Double-click to rename"
               >
@@ -155,95 +157,109 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
               </h1>
             )}
 
-            {albumRow.description && (
-              <p className="text-[0.78rem] text-paper-dim leading-relaxed mb-3 max-w-2xl">{albumRow.description}</p>
-            )}
+            <p className="mt-4 font-mono text-[0.62rem] uppercase tracking-[0.2em] text-paper-faint">
+              {artist.replace(/_/g, " ")} <span className="text-paper-faint/40 mx-2">·</span> {sorted.length} {sorted.length === 1 ? "track" : "tracks"} <span className="text-paper-faint/40 mx-2">·</span> {durMin} min
+            </p>
+          </div>
 
-            <div className="flex items-center gap-1.5 flex-wrap mt-auto">
-              <Bx onClick={playAll} disabled={!queue.length} color="purple">▶ Play All</Bx>
-              <Bx onClick={shuffle} disabled={!queue.length}>⤮ Shuffle</Bx>
-              <Bx
-                color="cyan"
-                onClick={() => navigator.clipboard.writeText(window.location.href)}
-              >
-                🔗 Share
-              </Bx>
-              <Bx color="green" onClick={toggleComplete}>{isComplete ? "✓ Complete" : "Mark Complete"}</Bx>
-              <Bx color="amber" onClick={distributeAll} disabled={allDistributed}>📡 {allDistributed ? "Distributed" : `Distribute (${sorted.length - distributedCount})`}</Bx>
+          {albumRow.description && (
+            <p className="text-[0.92rem] text-paper-dim leading-relaxed max-w-2xl font-display font-light">{albumRow.description}</p>
+          )}
+
+          <div className="flex items-center gap-2 flex-wrap pt-2">
+            <button
+              onClick={playAll}
+              disabled={!queue.length}
+              className="px-5 py-2.5 rounded-full font-display text-[0.78rem] font-semibold text-paper transition-all disabled:opacity-30 hover:scale-[1.02] disabled:hover:scale-100"
+              style={{ background: "linear-gradient(135deg, #ec4899, #8b5cf6)", boxShadow: "0 4px 16px rgba(236,72,153,0.32)" }}
+            >
+              ▶ Play all
+            </button>
+            <Btn onClick={shuffle} disabled={!queue.length}>⤮ Shuffle</Btn>
+            <Btn onClick={() => navigator.clipboard.writeText(window.location.href)}>🔗 Share</Btn>
+            <div className="ml-auto flex items-center gap-2">
+              <Btn onClick={toggleComplete} variant={isComplete ? "green" : "subtle"}>
+                {isComplete ? "✓ Complete" : "Mark complete"}
+              </Btn>
+              <Btn onClick={distributeAll} disabled={allDistributed} variant="amber">
+                📡 {allDistributed ? "Distributed" : `Distribute${distributedCount > 0 ? ` (${sorted.length - distributedCount})` : ""}`}
+              </Btn>
             </div>
-
-            {lyricsTrack && (
-              <div className="mt-3 rounded border border-brd bg-bg/60 p-3 max-h-[148px] overflow-hidden">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="font-mono text-[0.5rem] uppercase tracking-[0.2em] text-purple">Lyrics</span>
-                  <button
-                    onClick={() => setLyricsTrackId(null)}
-                    className="font-mono text-[0.5rem] uppercase tracking-[0.16em] text-paper-faint hover:text-paper"
-                  >
-                    clear
-                  </button>
-                </div>
-                <KaraokeLyrics
-                  title={lyricsTrack.title}
-                  lyrics={lyricsTrack.lyrics ?? []}
-                  trackId={lyricsTrack._id}
-                />
-              </div>
-            )}
           </div>
         </div>
       </div>
 
-      {/* Track list — full width below header */}
-      <div className="rounded-md border border-brd bg-card/50 backdrop-blur p-2 space-y-0.5">
-        {sorted.map((t, i) => (
-          <TrackRow
-            key={t._id}
-            trackId={t._id}
-            trackNum={t.trackNum}
-            title={t.title}
-            artistSlug={t.artistSlug}
-            albumSlug={t.albumSlug}
-            duration={t.duration}
-            generator={t.generator}
-            audioKey={t.audioKey}
-            hearted={hearted.has(t._id)}
-            onShowLyrics={() => setLyricsTrackId(t._id)}
-            queue={queue}
-            index={i}
-            size="comfortable"
-            genre={t.genre}
+      {lyricsTrack && (
+        <div className="rounded-md border border-brd/60 bg-bg2/40 p-5 mb-10 max-w-3xl">
+          <div className="flex items-center justify-between mb-3">
+            <span className="font-mono text-[0.55rem] uppercase tracking-[0.22em] text-purple">Lyrics · {lyricsTrack.title}</span>
+            <button
+              onClick={() => setLyricsTrackId(null)}
+              className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint hover:text-paper"
+            >
+              clear
+            </button>
+          </div>
+          <KaraokeLyrics
+            title={lyricsTrack.title}
+            lyrics={lyricsTrack.lyrics ?? []}
+            trackId={lyricsTrack._id}
           />
-        ))}
+        </div>
+      )}
+
+      <div className="border-t border-brd/40 pt-6">
+        <p className="font-mono text-[0.5rem] uppercase tracking-[0.22em] text-paper-faint mb-4">Tracks</p>
+        <div className="rounded-md bg-card/30 backdrop-blur p-2 space-y-0.5">
+          {sorted.map((t, i) => (
+            <TrackRow
+              key={t._id}
+              trackId={t._id}
+              trackNum={t.trackNum}
+              title={t.title}
+              artistSlug={t.artistSlug}
+              albumSlug={t.albumSlug}
+              duration={t.duration}
+              generator={t.generator}
+              audioKey={t.audioKey}
+              hearted={hearted.has(t._id)}
+              onShowLyrics={() => setLyricsTrackId(t._id)}
+              queue={queue}
+              index={i}
+              size="comfortable"
+              genre={t.genre}
+            />
+          ))}
+        </div>
       </div>
     </main>
   );
 }
 
-function Bx({
+function Btn({
   children,
-  color,
   onClick,
   disabled,
+  variant = "default",
 }: {
   children: React.ReactNode;
-  color?: "purple" | "cyan" | "green" | "amber";
   onClick?: () => void;
   disabled?: boolean;
+  variant?: "default" | "subtle" | "green" | "amber";
 }) {
-  const colors = {
-    purple: { border: "rgba(139,92,246,0.4)", text: "#8b5cf6", bg: "rgba(139,92,246,0.06)" },
-    cyan: { border: "rgba(6,182,212,0.4)", text: "#06b6d4", bg: "rgba(6,182,212,0.06)" },
-    green: { border: "rgba(52,211,153,0.4)", text: "#34d399", bg: "rgba(52,211,153,0.06)" },
-    amber: { border: "rgba(251,191,36,0.4)", text: "#fbbf24", bg: "rgba(251,191,36,0.06)" },
+  const styles: Record<string, { border: string; bg: string; color: string; hover: string }> = {
+    default: { border: "rgba(255,255,255,0.12)", bg: "transparent", color: "var(--color-paper)", hover: "rgba(255,255,255,0.04)" },
+    subtle: { border: "rgba(255,255,255,0.08)", bg: "transparent", color: "rgba(226,232,240,0.65)", hover: "rgba(255,255,255,0.04)" },
+    green: { border: "rgba(52,211,153,0.4)", bg: "rgba(52,211,153,0.06)", color: "#34d399", hover: "rgba(52,211,153,0.1)" },
+    amber: { border: "rgba(251,191,36,0.35)", bg: "rgba(251,191,36,0.04)", color: "#fbbf24", hover: "rgba(251,191,36,0.08)" },
   };
-  const c = color ? colors[color] : { border: "var(--color-brd)", text: "var(--color-t2)", bg: "transparent" };
+  const s = styles[variant];
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className="font-mono text-[0.6rem] uppercase tracking-[0.14em] px-2.5 py-1.5 rounded border transition-all disabled:opacity-30 hover:translate-y-[-1px]"
-      style={{ borderColor: c.border, color: c.text, background: c.bg }}
+      className="px-3.5 py-2 rounded-full font-mono text-[0.6rem] uppercase tracking-[0.16em] border transition-colors disabled:opacity-30 hover:!bg-[var(--btn-hover)]"
+      style={{ borderColor: s.border, color: s.color, background: s.bg, ["--btn-hover" as string]: s.hover }}
     >
       {children}
     </button>

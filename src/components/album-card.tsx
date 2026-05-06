@@ -21,6 +21,7 @@ export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, s
   const { get } = useUrlCache();
   const coverUrl = coverKey ? get(coverKey) : undefined;
   const moveTrack = useMutation(api.tracks.move);
+  const removeAlbum = useMutation(api.albums.removeAndOrphan);
   const [trackOver, setTrackOver] = useState(false);
   const href = `/library/${artist}/${slug}`;
 
@@ -67,6 +68,14 @@ export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, s
     } catch (err) {
       console.error("[mh-drop] err:", err);
     }
+  };
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!albumId) return;
+    if (!confirm(`Delete album "${name}"? ${trackCount} track${trackCount === 1 ? "" : "s"} will become singles.`)) return;
+    try { await removeAlbum({ id: albumId }); } catch (err) { console.error("album delete:", err); }
   };
 
   const onClick = (e: React.MouseEvent) => {
@@ -129,6 +138,21 @@ export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, s
         >
           {trackCount} trk
         </span>
+        {albumId && (
+          <button
+            type="button"
+            onClick={handleDelete}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full grid place-items-center opacity-0 group-hover:opacity-100 transition-all text-paper hover:scale-110"
+            style={{ background: "rgba(5,6,8,0.85)", border: "1px solid rgba(255,255,255,0.12)", backdropFilter: "blur(8px)" }}
+            aria-label={`Delete album ${name}`}
+            title="Delete album"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        )}
         {trackOver && (
           <div className="absolute inset-0 grid place-items-center pointer-events-none" style={{ background: "rgba(236,72,153,0.22)" }}>
             <span className="font-mono text-[0.6rem] uppercase tracking-[0.2em] text-pink font-bold">drop here</span>
