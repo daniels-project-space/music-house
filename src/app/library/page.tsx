@@ -71,7 +71,7 @@ function LibraryInner() {
   return (
     <main className="px-5 sm:px-6 lg:px-8 pt-3 pb-32 animate-fi">
       {/* Filter bar — legacy .fb */}
-      <div className="flex items-center gap-2 flex-wrap mb-3">
+      <div className="flex items-center gap-2 flex-wrap mb-5">
         <select
           className="fselect"
           value={genreFilter}
@@ -105,7 +105,7 @@ function LibraryInner() {
         </span>
       </div>
 
-      <div className="space-y-7">
+      <div className="space-y-12">
         {SECTIONS.map((s) => {
           const list = bySection[s.key] ?? [];
           return (
@@ -192,7 +192,7 @@ function Section({
       className={"transition-all " + (hover ? "rounded-lg" : "")}
       style={hover ? { boxShadow: `inset 0 0 0 2px ${accent}, 0 0 32px ${rule}`, padding: "0.5rem" } : undefined}
     >
-      <div className="flex items-baseline justify-between mb-2 pb-1.5" style={{ borderBottom: `1px solid ${rule}` }}>
+      <div className="flex items-baseline justify-between mb-4 pb-2.5" style={{ borderBottom: `1px solid ${rule}` }}>
         <div className="flex items-baseline gap-2">
           <span style={{ color: accent }} className="text-[0.95rem] leading-none">{icon}</span>
           <h2 className="font-display text-[0.9rem] font-bold tracking-tight leading-none" style={{ color: accent }}>{label}</h2>
@@ -217,7 +217,7 @@ function Grid({ albums, tracksByAlbum }: { albums: { _id: string; artistSlug: st
   return (
     <div
       className="grid"
-      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "1rem" }}
+      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "1.5rem" }}
     >
       {albums.map((a) => (
         <AlbumCard
@@ -263,7 +263,7 @@ function UnsortedTracks({
 
   return (
     <section>
-      <div className="flex items-baseline justify-between mb-2 pb-1.5" style={{ borderBottom: "1px solid rgba(251,191,36,0.25)" }}>
+      <div className="flex items-baseline justify-between mb-4 pb-2.5" style={{ borderBottom: "1px solid rgba(251,191,36,0.25)" }}>
         <div className="flex items-baseline gap-2">
           <span className="text-[0.95rem] text-amber leading-none">◯</span>
           <h2 className="font-display text-[0.9rem] font-bold tracking-tight text-amber leading-none">Unsorted</h2>

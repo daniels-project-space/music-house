@@ -67,26 +67,14 @@ export function Player() {
       <audio ref={audioRef} onEnded={next} className="hidden" />
       {current && (
         <div
-          className="fixed bottom-0 left-0 right-0 z-40 backdrop-blur-2xl"
+          className="sticky bottom-0 z-40 backdrop-blur-2xl shrink-0"
           style={{
             background: "linear-gradient(180deg, rgba(10,12,18,0.94), rgba(5,6,8,0.98))",
             borderTop: "1px solid var(--color-brd)",
             boxShadow: "0 -16px 40px rgba(0,0,0,0.5)",
           }}
         >
-          {/* Top progress fill — legacy detail */}
-          <div className="h-[3px] w-full bg-paper/[0.04] cursor-pointer relative group/pf" onClick={seek}>
-            <div
-              className="absolute top-0 left-0 h-full transition-all duration-100"
-              style={{
-                width: `${pct}%`,
-                background: "linear-gradient(90deg, #ec4899, #8b5cf6, #06b6d4)",
-                boxShadow: "0 0 8px rgba(236,72,153,0.6)",
-              }}
-            />
-          </div>
-
-          <div className="px-5 sm:px-6 lg:px-8 py-2 flex items-center gap-3 sm:gap-4">
+          <div className="px-5 sm:px-6 lg:px-8 py-3 flex items-center gap-4 sm:gap-5">
             {/* Vinyl art with cover label */}
             <div className="relative w-14 h-14 shrink-0">
               <div className={"absolute inset-0 rounded-full vinyl " + (playing ? "animate-vinyl animate-vinyl-glow" : "")} />

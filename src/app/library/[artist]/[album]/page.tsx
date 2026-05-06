@@ -16,6 +16,8 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
   const hearted = useHeartedSet();
   const { play, current } = usePlayer();
   const renameAlbum = useMutation(api.albums.rename);
+  const setComplete = useMutation(api.albums.setComplete);
+  const setDistributed = useMutation(api.tracks.setDistributed);
 
   const allKeys = useMemo(() => {
     const k: string[] = [];
@@ -58,6 +60,19 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
   };
 
   const totalDuration = sorted.reduce((s, t) => s + (t.duration ?? 0), 0);
+  const distributedCount = sorted.filter((t) => (t as { distributed?: boolean }).distributed).length;
+  const allDistributed = distributedCount > 0 && distributedCount === sorted.length;
+  const isComplete = !!(albumRow as { completedAt?: number }).completedAt;
+
+  const distributeAll = async () => {
+    if (!confirm(`Distribute ${sorted.length} track${sorted.length === 1 ? "" : "s"} from this album?`)) return;
+    for (const t of sorted) {
+      try { await setDistributed({ id: t._id, distributed: true }); } catch {}
+    }
+  };
+  const toggleComplete = async () => {
+    try { await setComplete({ id: albumRow._id, completed: !isComplete }); } catch {}
+  };
   const durMin = Math.round(totalDuration / 60);
   const isPlayingThis = !!(current && queue.find((q) => q.id === current.id));
 
@@ -153,8 +168,8 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
               >
                 🔗 Share
               </Bx>
-              <Bx color="green">Complete</Bx>
-              <Bx color="amber">📡 Distribute</Bx>
+              <Bx color="green" onClick={toggleComplete}>{isComplete ? "✓ Complete" : "Mark Complete"}</Bx>
+              <Bx color="amber" onClick={distributeAll} disabled={allDistributed}>📡 {allDistributed ? "Distributed" : `Distribute (${sorted.length - distributedCount})`}</Bx>
             </div>
 
             {lyricsTrack && (
@@ -180,7 +195,7 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
       </div>
 
       {/* Track list — full width below header */}
-      <div className="rounded-md border border-brd bg-card/50 backdrop-blur p-1">
+      <div className="rounded-md border border-brd bg-card/50 backdrop-blur p-2 space-y-0.5">
         {sorted.map((t, i) => (
           <TrackRow
             key={t._id}
@@ -196,6 +211,8 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
             onShowLyrics={() => setLyricsTrackId(t._id)}
             queue={queue}
             index={i}
+            size="comfortable"
+            genre={t.genre}
           />
         ))}
       </div>

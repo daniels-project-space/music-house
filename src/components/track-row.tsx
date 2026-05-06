@@ -21,6 +21,8 @@ type TrackRowProps = {
   onShowLyrics?: () => void;
   queue?: PlayerTrack[];
   index?: number;
+  size?: "compact" | "comfortable";
+  genre?: string;
 };
 
 export function TrackRow({
@@ -37,6 +39,8 @@ export function TrackRow({
   onShowLyrics,
   queue,
   index,
+  size = "compact",
+  genre,
 }: TrackRowProps) {
   const toggleHeart = useMutation(api.hearts.toggle);
   const archive = useMutation(api.tracks.archive);
@@ -119,23 +123,25 @@ export function TrackRow({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       className={
-        "track-row group flex items-center gap-2.5 px-2.5 py-1.5 rounded transition-colors relative " +
+        (size === "comfortable"
+          ? "track-row group flex items-center gap-3.5 px-4 py-3 rounded-md transition-colors relative "
+          : "track-row group flex items-center gap-2.5 px-2.5 py-1.5 rounded transition-colors relative ") +
         (isPlaying ? "now-playing-bar bg-purple/10" : "hover:bg-paper/[0.03]") +
         (dragOver === "above" ? " drag-above" : "") +
         (dragOver === "below" ? " drag-below" : "")
       }
     >
       <span className="drag-handle text-[0.62rem] select-none w-3 shrink-0 cursor-grab active:cursor-grabbing text-t4">⋮⋮</span>
-      <span className="font-mono text-[0.56rem] text-t4 w-5 text-right shrink-0 tabular-nums">{trackNum ?? "—"}</span>
+      <span className={"font-mono text-t4 text-right shrink-0 tabular-nums " + (size === "comfortable" ? "text-[0.7rem] w-7" : "text-[0.56rem] w-5")}>{trackNum ?? "—"}</span>
       <button
         onClick={handlePlay}
         className={
-          "w-6 h-6 rounded-full grid place-items-center transition-all shrink-0 " +
+          (size === "comfortable" ? "w-9 h-9 " : "w-6 h-6 ") + "rounded-full grid place-items-center transition-all shrink-0 " +
           (isPlaying ? "bg-pink/15 text-pink" : "bg-purple/10 text-purple hover:bg-purple/25 hover:scale-110")
         }
         aria-label="Play"
       >
-        <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+        <svg width={size === "comfortable" ? 12 : 9} height={size === "comfortable" ? 12 : 9} viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
       </button>
       <div className="flex-1 min-w-0">
         {editing ? (
@@ -161,26 +167,26 @@ export function TrackRow({
           />
         ) : (
           <div
-            className={"text-[0.76rem] truncate font-display font-medium cursor-text leading-tight " + (isPlaying ? "text-purple" : "text-paper")}
+            className={(size === "comfortable" ? "text-[0.92rem] " : "text-[0.76rem] ") + "truncate font-display font-medium cursor-text leading-tight " + (isPlaying ? "text-purple" : "text-paper")}
             onDoubleClick={() => setEditing(true)}
             title="Double-click to rename"
           >
             {title}
           </div>
         )}
-        <div className="font-mono text-[0.5rem] text-t3 mt-0.5 truncate leading-tight">
+        <div className={"font-mono text-t3 truncate leading-tight " + (size === "comfortable" ? "text-[0.62rem] mt-1" : "text-[0.5rem] mt-0.5")}>
           {artistSlug}
           {albumSlug ? " · " + albumSlug : ""}
-          <span className="ml-1.5 text-[0.46rem]" style={{ color: generator === "suno" ? "#ec4899" : "#8b5cf6" }}>◆ {generator}</span>
+          <span className={"ml-1.5 " + (size === "comfortable" ? "text-[0.55rem]" : "text-[0.46rem]")} style={{ color: generator === "suno" ? "#ec4899" : "#8b5cf6" }}>◆ {generator}</span>{genre ? <span className={"ml-2 px-1.5 py-0.5 rounded " + (size === "comfortable" ? "text-[0.5rem]" : "text-[0.44rem]")} style={{ background: "rgba(139,92,246,0.08)", color: "#a78bfa" }}>{genre}</span> : null}
         </div>
       </div>
-      <span className="font-mono text-[0.56rem] text-t3 w-9 text-right shrink-0 tabular-nums">{dur}</span>
+      <span className={"font-mono text-t3 text-right shrink-0 tabular-nums " + (size === "comfortable" ? "text-[0.68rem] w-12" : "text-[0.56rem] w-9")}>{dur}</span>
       <button
         onClick={() => toggleHeart({ trackId })}
-        className={"w-6 h-6 grid place-items-center transition-all shrink-0 " + (hearted ? "text-pink animate-pulse-dot" : "text-t4 hover:text-pink")}
+        className={(size === "comfortable" ? "w-8 h-8 " : "w-6 h-6 ") + "grid place-items-center transition-all shrink-0 " + (hearted ? "text-pink animate-pulse-dot" : "text-t4 hover:text-pink")}
         aria-label={hearted ? "Unheart" : "Heart"}
       >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill={hearted ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+        <svg width={size === "comfortable" ? 15 : 12} height={size === "comfortable" ? 15 : 12} viewBox="0 0 24 24" fill={hearted ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
           <path d="M12 21s-7-4.35-7-10a4.5 4.5 0 0 1 8-2.83A4.5 4.5 0 0 1 19 11c0 5.65-7 10-7 10z" />
         </svg>
       </button>

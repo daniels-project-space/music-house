@@ -18,6 +18,7 @@ export default defineSchema({
     genre: v.optional(v.string()),
     coverKey: v.optional(v.string()),
     section: v.optional(v.string()),
+    completedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_artist", ["artistSlug"])

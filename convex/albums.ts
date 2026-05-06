@@ -61,6 +61,12 @@ export const setSection = mutation({
   handler: async (ctx, { id, section }) => ctx.db.patch(id, { section }),
 });
 
+export const setComplete = mutation({
+  args: { id: v.id("albums"), completed: v.boolean() },
+  handler: async (ctx, { id, completed }) =>
+    ctx.db.patch(id, { completedAt: completed ? Date.now() : undefined }),
+});
+
 export const remove = mutation({
   args: { id: v.id("albums") },
   handler: async (ctx, { id }) => ctx.db.delete(id),

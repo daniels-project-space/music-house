@@ -24,7 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className="pb-28">
+      <body className="min-h-screen flex flex-col">
         <ConvexClientProvider>
           <UrlCacheProvider>
             <PlayerProvider>
@@ -34,7 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <TopBar />
                 <PipelineStrip />
               </div>
-              {children}
+              <div className="flex-1">{children}</div>
               <Player />
             </PlayerProvider>
           </UrlCacheProvider>
