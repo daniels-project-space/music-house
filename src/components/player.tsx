@@ -67,7 +67,7 @@ export function Player() {
       <audio ref={audioRef} onEnded={next} className="hidden" />
       {current && (
         <div
-          className="fixed bottom-0 left-0 lg:left-60 right-0 z-40 backdrop-blur-2xl"
+          className="fixed bottom-0 left-0 lg:left-[240px] right-0 z-40 backdrop-blur-2xl"
           style={{
             background: "linear-gradient(180deg, rgba(10,12,18,0.94), rgba(5,6,8,0.98))",
             borderTop: "1px solid var(--color-brd)",
