@@ -7,7 +7,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { getBuffer } from "../lib/storage";
 import { getServiceSecrets } from "../lib/vault";
-import { distributeToDistrokid } from "../lib/distrokid";
+import { distributeToRoutenote } from "../lib/routenote";
 
 function convexClient() {
   const url = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -69,16 +69,16 @@ export const distributeTrack = task({
         coverPath = await writeTempFile("cover", coverExt, coverBuf);
       }
 
-      const [dk, bb, anth] = await Promise.all([
-        getServiceSecrets("distrokid"),
+      const [rn, bb, anth] = await Promise.all([
+        getServiceSecrets("routenote"),
         getServiceSecrets("browserbase"),
         getServiceSecrets("anthropic"),
       ]);
 
-      const email = dk.DISTROKID_EMAIL ?? dk.EMAIL;
-      const password = dk.DISTROKID_PASSWORD ?? dk.PASSWORD;
+      const email = rn.ROUTENOTE_EMAIL ?? rn.EMAIL;
+      const password = rn.ROUTENOTE_PASSWORD ?? rn.PASSWORD;
       if (!email || !password) {
-        throw new Error("vault distrokid: missing DISTROKID_EMAIL or DISTROKID_PASSWORD");
+        throw new Error("vault routenote: missing ROUTENOTE_EMAIL or ROUTENOTE_PASSWORD");
       }
       const bbApiKey = bb.BROWSERBASE_API_KEY ?? bb.API_KEY;
       const bbProjectId = bb.BROWSERBASE_PROJECT_ID ?? bb.PROJECT_ID;
@@ -88,7 +88,7 @@ export const distributeTrack = task({
       const anthKey = anth.ANTHROPIC_API_KEY;
       if (!anthKey) throw new Error("vault anthropic: missing ANTHROPIC_API_KEY");
 
-      const { sessionId, liveViewUrl } = await distributeToDistrokid(
+      const { sessionId, liveViewUrl } = await distributeToRoutenote(
         {
           audioPath,
           coverPath,

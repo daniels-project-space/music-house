@@ -308,7 +308,7 @@ export function TrackRow({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="font-display text-paper text-base mb-1">Distribute · {title}</div>
-            <div className="font-mono text-t3 text-[0.7rem] mb-4">DistroKid via Stagehand</div>
+            <div className="font-mono text-t3 text-[0.7rem] mb-4">RouteNote via Stagehand</div>
             {distributing || !distributionJob ? (
               <div className="font-mono text-t3 text-[0.75rem]">Starting browser session…</div>
             ) : distributionJob.status === "pending" || distributionJob.status === "running" ? (
@@ -318,7 +318,7 @@ export function TrackRow({
             ) : distributionJob.status === "draft_ready" && distributionJob.liveViewUrl ? (
               <>
                 <div className="font-mono text-t2 text-[0.75rem] mb-3">
-                  Draft ready. Open the live browser session below, review the metadata DistroKid filled, then click submit on their page.
+                  Draft ready. Open the live browser session below, review the metadata RouteNote filled, then click submit on their page.
                 </div>
                 <a
                   href={distributionJob.liveViewUrl}
@@ -336,7 +336,7 @@ export function TrackRow({
                   className="mt-2 w-full rounded-md border px-3 py-2 font-display text-paper text-[0.75rem] hover:bg-paper/[0.04] transition-colors"
                   style={{ borderColor: "var(--color-brd)" }}
                 >
-                  I submitted on DistroKid · mark complete
+                  I submitted on RouteNote · mark complete
                 </button>
               </>
             ) : distributionJob.status === "failed" ? (

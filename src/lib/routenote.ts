@@ -15,10 +15,10 @@ export type DistributeResult = {
   liveViewUrl: string;
 };
 
-const SIGNIN_URL = "https://distrokid.com/signin/";
-const NEW_UPLOAD_URL = "https://distrokid.com/new/";
+const SIGNIN_URL = "https://routenote.com/login";
+const HOME_URL = "https://routenote.com/";
 
-export async function distributeToDistrokid(
+export async function distributeToRoutenote(
   input: DistributeInput,
   creds: { email: string; password: string },
   bb: { apiKey: string; projectId: string },
@@ -47,32 +47,30 @@ export async function distributeToDistrokid(
 
   try {
     await page.goto(SIGNIN_URL, { waitUntil: "domcontentloaded" });
-    await stagehand.act(`Type "${creds.email}" into the email field`);
+    await stagehand.act(`Type "${creds.email}" into the email or username field`);
     await stagehand.act(`Type "${creds.password}" into the password field`);
-    await stagehand.act("Click the Sign In submit button");
+    await stagehand.act("Click the Login or Sign In submit button");
     await page.waitForLoadState("networkidle").catch(() => {});
-
-    await page.goto(NEW_UPLOAD_URL, { waitUntil: "domcontentloaded" });
-    await stagehand.act("If asked to choose between Single and Album, choose Single");
-
-    const audioInput = page.locator('input[type="file"]').first();
-    await audioInput.setInputFiles(input.audioPath);
 
     const explicit = input.explicit ? "yes" : "no";
     const coverNote = input.coverPath
-      ? `A cover-art image is available at path "${input.coverPath}" — when DistroKid prompts for cover art upload, upload it.`
-      : `If DistroKid asks for cover art and none is provided, skip past it (you can return without finalizing).`;
+      ? `A cover-art image is available at path "${input.coverPath}" — when prompted to upload cover art, upload it from that path.`
+      : `If cover art is required and none is provided, stop on that page and return so the user can upload manually.`;
+
     const directive = [
-      `You are filling out the DistroKid upload form for the user.`,
+      `You are uploading a single song for distribution on RouteNote (routenote.com).`,
+      `If you are still on the homepage or dashboard, navigate to the music distribution upload flow ("Distribute" / "New Release" / "Upload Music" — find whichever button/link starts the upload of a new release).`,
+      `Choose the option to release as a Single (one song).`,
+      `When prompted, upload the audio file. The audio file path is "${input.audioPath}" — set it on the file input element.`,
       `Song title: "${input.title}"`,
       `Artist name: "${input.artistName}"`,
       `Genre: "${input.genre ?? "Electronic"}"`,
       `Explicit lyrics: ${explicit}`,
-      `Enable distribution to ALL stores: Spotify, Apple Music, Deezer, SoundCloud, YouTube Music, Tidal, Amazon Music, and any others offered.`,
-      `Set songwriter / iTunes / writer-name fields to the same artist name unless DistroKid requires a different format.`,
+      `Enable distribution to ALL stores RouteNote offers (Spotify, Apple Music, Deezer, Tidal, Amazon Music, YouTube Music, SoundCloud, TikTok, and any others) — accept the default "select all" if available.`,
+      `Set songwriter / composer fields to the same artist name unless RouteNote requires real-name format.`,
+      `Continue clicking Continue / Next / Save through the multi-step form.`,
       coverNote,
-      `Continue clicking Continue / Next through the form.`,
-      `STOP at the final review/payment page. DO NOT click any final submit, pay, or confirm-and-pay button.`,
+      `STOP at the final review / submit page. DO NOT click any final submit, distribute, or confirm button.`,
       `When you reach the final review page, return.`,
     ].join("\n");
 

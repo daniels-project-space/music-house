@@ -98,7 +98,7 @@ export default defineSchema({
 
   distributionJobs: defineTable({
     trackId: v.id("tracks"),
-    distributor: v.literal("distrokid"),
+    distributor: v.literal("routenote"),
     status: v.union(
       v.literal("pending"),
       v.literal("running"),

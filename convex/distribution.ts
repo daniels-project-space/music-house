@@ -6,7 +6,7 @@ export const create = mutation({
   handler: async (ctx, { trackId }) => {
     const id = await ctx.db.insert("distributionJobs", {
       trackId,
-      distributor: "distrokid",
+      distributor: "routenote",
       status: "pending",
       createdAt: Date.now(),
     });
