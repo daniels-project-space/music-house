@@ -48,7 +48,6 @@ export function TrackRow({
   const move = useMutation(api.tracks.move);
   const rename = useMutation(api.tracks.rename);
   const setDistributed = useMutation(api.tracks.setDistributed);
-  const removeTrack = useMutation(api.tracks.remove);
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(title);
   useEffect(() => setDraftTitle(title), [title]);
@@ -284,14 +283,13 @@ export function TrackRow({
                 <Item icon="→" label="Move to…" onClick={() => setMoveSubmenu(true)} />
                 <Item icon="📡" label="Distribute" onClick={startDistribute} />
                 <Item icon="✓" label="Mark distributed" onClick={() => { setDistributed({ id: trackId, distributed: true }); setMenuOpen(false); }} />
-                <Item icon="📦" label="Archive" onClick={() => { archive({ id: trackId }); setMenuOpen(false); }} />
                 <div className="my-1 mx-2 h-px bg-brd" />
                 <Item
                   icon="🗑"
                   label="Delete"
                   danger
                   onClick={() => {
-                    if (confirm(`Delete "${title}" permanently?`)) removeTrack({ id: trackId });
+                    archive({ id: trackId });
                     setMenuOpen(false);
                   }}
                 />
