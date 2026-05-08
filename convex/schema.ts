@@ -46,6 +46,7 @@ export default defineSchema({
     rating: v.optional(v.number()),
     distributed: v.boolean(),
     distributedAt: v.optional(v.number()),
+    lastDistributionJobId: v.optional(v.id("distributionJobs")),
     createdAt: v.number(),
     archivedAt: v.optional(v.number()),
   })
@@ -92,6 +93,28 @@ export default defineSchema({
     createdAt: v.number(),
     completedAt: v.optional(v.number()),
   })
+    .index("by_status", ["status"])
+    .index("by_trigger_run", ["triggerRunId"]),
+
+  distributionJobs: defineTable({
+    trackId: v.id("tracks"),
+    distributor: v.literal("distrokid"),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("running"),
+      v.literal("draft_ready"),
+      v.literal("complete"),
+      v.literal("failed"),
+    ),
+    triggerRunId: v.optional(v.string()),
+    browserbaseSessionId: v.optional(v.string()),
+    liveViewUrl: v.optional(v.string()),
+    releaseUrl: v.optional(v.string()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_track", ["trackId"])
     .index("by_status", ["status"])
     .index("by_trigger_run", ["triggerRunId"]),
 });

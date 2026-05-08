@@ -16,6 +16,7 @@
     "@ai-sdk/anthropic": "^3.0.74",
     "@aws-sdk/client-s3": "^3.1041.0",
     "@aws-sdk/s3-request-presigner": "^3.1041.0",
+    "@browserbasehq/stagehand": "^3.3.0",
     "@mastra/core": "^1.31.0",
     "@mastra/memory": "^1.17.4",
     "@trigger.dev/sdk": "^4.4.5",

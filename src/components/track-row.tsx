@@ -58,11 +58,18 @@ export function TrackRow({
   const [menuOpen, setMenuOpen] = useState(false);
   const [moveSubmenu, setMoveSubmenu] = useState(false);
   const [dragOver, setDragOver] = useState<"above" | "below" | null>(null);
+  const [distributing, setDistributing] = useState(false);
+  const [distributePanelOpen, setDistributePanelOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const albumsForArtist = useQuery(
     api.albums.list,
     menuOpen && moveSubmenu ? { artistSlug } : "skip",
   );
+  const distributionJob = useQuery(
+    api.distribution.byTrack,
+    distributePanelOpen ? { trackId } : "skip",
+  );
+  const setDistributionComplete = useMutation(api.distribution.setComplete);
 
   useEffect(() => {
     if (audioKey) ensure([audioKey]);
@@ -84,6 +91,29 @@ export function TrackRow({
     await move({ id: trackId, targetArtistSlug: artistSlug, targetAlbumSlug });
     setMenuOpen(false);
     setMoveSubmenu(false);
+  };
+
+  const startDistribute = async () => {
+    setMenuOpen(false);
+    setDistributePanelOpen(true);
+    setDistributing(true);
+    try {
+      const r = await fetch("/api/distribute", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ trackId }),
+      });
+      if (!r.ok) {
+        const text = await r.text();
+        alert(`Distribute failed to start: ${text}`);
+        setDistributePanelOpen(false);
+      }
+    } catch (e) {
+      alert(`Distribute failed to start: ${(e as Error).message}`);
+      setDistributePanelOpen(false);
+    } finally {
+      setDistributing(false);
+    }
   };
 
   const isPlaying = current?.id === trackId;
@@ -252,7 +282,8 @@ export function TrackRow({
                 <Item icon="✎" label="Rename" onClick={() => { setMenuOpen(false); setEditing(true); }} />
                 <Item icon="♪" label="Lyrics" onClick={() => { setMenuOpen(false); onShowLyrics?.(); }} />
                 <Item icon="→" label="Move to…" onClick={() => setMoveSubmenu(true)} />
-                <Item icon="📡" label="Distribute" onClick={() => { setDistributed({ id: trackId, distributed: true }); setMenuOpen(false); }} />
+                <Item icon="📡" label="Distribute" onClick={startDistribute} />
+                <Item icon="✓" label="Mark distributed" onClick={() => { setDistributed({ id: trackId, distributed: true }); setMenuOpen(false); }} />
                 <Item icon="📦" label="Archive" onClick={() => { archive({ id: trackId }); setMenuOpen(false); }} />
                 <div className="my-1 mx-2 h-px bg-brd" />
                 <Item
@@ -269,6 +300,61 @@ export function TrackRow({
           </div>
         )}
       </div>
+      {distributePanelOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm" onClick={() => setDistributePanelOpen(false)}>
+          <div
+            className="w-full max-w-md rounded-lg border bg-elevated p-5 shadow-2xl"
+            style={{ borderColor: "var(--color-brd)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="font-display text-paper text-base mb-1">Distribute · {title}</div>
+            <div className="font-mono text-t3 text-[0.7rem] mb-4">DistroKid via Stagehand</div>
+            {distributing || !distributionJob ? (
+              <div className="font-mono text-t3 text-[0.75rem]">Starting browser session…</div>
+            ) : distributionJob.status === "pending" || distributionJob.status === "running" ? (
+              <div className="font-mono text-t3 text-[0.75rem]">
+                {distributionJob.status === "pending" ? "Queued…" : "Filling DistroKid form…"}
+              </div>
+            ) : distributionJob.status === "draft_ready" && distributionJob.liveViewUrl ? (
+              <>
+                <div className="font-mono text-t2 text-[0.75rem] mb-3">
+                  Draft ready. Open the live browser session below, review the metadata DistroKid filled, then click submit on their page.
+                </div>
+                <a
+                  href={distributionJob.liveViewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full rounded-md bg-purple px-3 py-2 text-center font-display text-paper text-[0.8rem] hover:bg-purple/80 transition-colors"
+                >
+                  Open Browserbase live view ↗
+                </a>
+                <button
+                  onClick={async () => {
+                    await setDistributionComplete({ id: distributionJob._id, releaseUrl: undefined });
+                    setDistributePanelOpen(false);
+                  }}
+                  className="mt-2 w-full rounded-md border px-3 py-2 font-display text-paper text-[0.75rem] hover:bg-paper/[0.04] transition-colors"
+                  style={{ borderColor: "var(--color-brd)" }}
+                >
+                  I submitted on DistroKid · mark complete
+                </button>
+              </>
+            ) : distributionJob.status === "failed" ? (
+              <div className="font-mono text-red text-[0.7rem] whitespace-pre-wrap">
+                Failed: {distributionJob.error ?? "unknown error"}
+              </div>
+            ) : (
+              <div className="font-mono text-t2 text-[0.75rem]">Marked complete.</div>
+            )}
+            <button
+              onClick={() => setDistributePanelOpen(false)}
+              className="mt-4 w-full text-center font-mono text-t4 text-[0.65rem] hover:text-paper transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
