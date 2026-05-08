@@ -83,10 +83,10 @@ export const distributeTrack = task({
         getServiceSecrets("anthropic"),
       ]);
 
-      const email = rn.ROUTENOTE_EMAIL ?? rn.EMAIL;
+      const username = rn.ROUTENOTE_USERNAME ?? rn.USERNAME ?? rn.ROUTENOTE_EMAIL ?? rn.EMAIL;
       const password = rn.ROUTENOTE_PASSWORD ?? rn.PASSWORD;
-      if (!email || !password) {
-        throw new Error("vault routenote: missing ROUTENOTE_EMAIL or ROUTENOTE_PASSWORD");
+      if (!username || !password) {
+        throw new Error("vault routenote: missing ROUTENOTE_USERNAME or ROUTENOTE_PASSWORD");
       }
       const bbApiKey = bb.BROWSERBASE_API_KEY ?? bb.API_KEY;
       const bbProjectId = bb.BROWSERBASE_PROJECT_ID ?? bb.PROJECT_ID;
@@ -105,7 +105,7 @@ export const distributeTrack = task({
           artistName: humanizeSlug(track.artistSlug),
           genre: track.genre,
         },
-        { email, password },
+        { username, password },
         { apiKey: bbApiKey, projectId: bbProjectId },
         {
           provider: "anthropic",

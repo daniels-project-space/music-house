@@ -10,6 +10,11 @@ export type DistributeInput = {
   explicit?: boolean;
 };
 
+export type DistributeCreds = {
+  username: string;
+  password: string;
+};
+
 export type DistributeResult = {
   sessionId: string;
   liveViewUrl: string;
@@ -24,7 +29,7 @@ const RELEASES_URL = "https://www.routenote.com/rn/releases";
 
 export async function distributeToRoutenote(
   input: DistributeInput,
-  creds: { email: string; password: string },
+  creds: DistributeCreds,
   bb: { apiKey: string; projectId: string },
   llm: { provider: "anthropic"; apiKey: string; model: string },
   log: ProgressLogger = () => {},
@@ -67,13 +72,13 @@ export async function distributeToRoutenote(
     await sleep(1500);
 
     try {
-      const emailInput = page
+      const usernameInput = page
         .locator(
-          'input[type="email"], input[name="email"], input[autocomplete="username"], input[id*="email" i]',
+          'input[name="username"], input[autocomplete="username"], input[id*="user" i], input[placeholder*="user" i], input[type="text"]:not([type="search"]):not([type="hidden"])',
         )
         .first();
-      await emailInput.fill(creds.email);
-      await log("login:email-filled");
+      await usernameInput.fill(creds.username);
+      await log("login:username-filled");
 
       const passwordInput = page
         .locator('input[type="password"], input[name="password"]')
