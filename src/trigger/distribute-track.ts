@@ -97,7 +97,7 @@ export const distributeTrack = task({
       if (!anthKey) throw new Error("vault anthropic: missing ANTHROPIC_API_KEY");
 
       let savedSession = false;
-      const { sessionId, liveViewUrl } = await distributeToRoutenote(
+      const { sessionId, liveViewUrl, loggedIn, reachedReview } = await distributeToRoutenote(
         {
           audioPath,
           coverPath,
@@ -137,8 +137,13 @@ export const distributeTrack = task({
         liveViewUrl,
       });
 
-      logger.info("distribute:draft_ready", { jobId: input.jobId, liveViewUrl });
-      return { sessionId, liveViewUrl };
+      logger.info("distribute:draft_ready", {
+        jobId: input.jobId,
+        liveViewUrl,
+        loggedIn,
+        reachedReview,
+      });
+      return { sessionId, liveViewUrl, loggedIn, reachedReview };
     } catch (err) {
       const msg = (err as Error).message ?? String(err);
       logger.error("distribute:failed", { jobId: input.jobId, error: msg });

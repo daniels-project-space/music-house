@@ -18,6 +18,7 @@ export default function DistributionPage() {
   }
 
   const active = tracks.filter((t) => {
+    if (t.distributed) return false;
     const j = jobByTrack.get(t._id);
     return j && (j.status === "pending" || j.status === "running" || j.status === "draft_ready");
   });
@@ -80,32 +81,35 @@ export default function DistributionPage() {
           ) : (
             active.map((t) => {
               const j = jobByTrack.get(t._id)!;
+              const statusLabel =
+                j.status === "pending"
+                  ? "queued"
+                  : j.status === "running"
+                    ? "agent working"
+                    : "draft ready";
               return (
                 <Row key={t._id} track={t}>
-                  {j.status === "draft_ready" && j.liveViewUrl ? (
-                    <>
-                      <a
-                        href={j.liveViewUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2 py-1 rounded border mr-2"
-                        style={{ borderColor: "#fbbf24", color: "#fbbf24" }}
-                      >
-                        Live view ↗
-                      </a>
-                      <button
-                        onClick={() => setComplete({ id: j._id, releaseUrl: undefined })}
-                        className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2 py-1 rounded border"
-                        style={{ borderColor: "#06b6d4", color: "#06b6d4" }}
-                      >
-                        Done
-                      </button>
-                    </>
-                  ) : (
-                    <span className="font-mono text-[0.55rem] uppercase tracking-[0.12em] text-paper-dim">
-                      {j.status === "pending" ? "queued" : j.status}
-                    </span>
-                  )}
+                  <span className="font-mono text-[0.5rem] uppercase tracking-[0.14em] text-paper-faint mr-2">
+                    {statusLabel}
+                  </span>
+                  {j.liveViewUrl ? (
+                    <a
+                      href={j.liveViewUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2 py-1 rounded border mr-2"
+                      style={{ borderColor: "#fbbf24", color: "#fbbf24" }}
+                    >
+                      Live view ↗
+                    </a>
+                  ) : null}
+                  <button
+                    onClick={() => setComplete({ id: j._id, releaseUrl: undefined })}
+                    className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2 py-1 rounded border"
+                    style={{ borderColor: "#06b6d4", color: "#06b6d4" }}
+                  >
+                    Done
+                  </button>
                 </Row>
               );
             })
