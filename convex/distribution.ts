@@ -38,6 +38,16 @@ export const setDraftReady = mutation({
     }),
 });
 
+export const setLiveView = mutation({
+  args: {
+    id: v.id("distributionJobs"),
+    browserbaseSessionId: v.string(),
+    liveViewUrl: v.string(),
+  },
+  handler: async (ctx, { id, browserbaseSessionId, liveViewUrl }) =>
+    ctx.db.patch(id, { browserbaseSessionId, liveViewUrl }),
+});
+
 export const setComplete = mutation({
   args: {
     id: v.id("distributionJobs"),

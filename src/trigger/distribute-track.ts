@@ -96,6 +96,7 @@ export const distributeTrack = task({
       const anthKey = anth.ANTHROPIC_API_KEY;
       if (!anthKey) throw new Error("vault anthropic: missing ANTHROPIC_API_KEY");
 
+      let savedSession = false;
       const { sessionId, liveViewUrl } = await distributeToRoutenote(
         {
           audioPath,
@@ -111,8 +112,22 @@ export const distributeTrack = task({
           apiKey: anthKey,
           model: process.env.STAGEHAND_MODEL ?? "anthropic/claude-sonnet-4-6",
         },
-        (step, detail) => {
+        async (step, detail) => {
           logger.info(`rn:${step}`, { detail });
+          if (!savedSession && step === "init:done" && detail) {
+            const url = detail;
+            const sid = url.split("/").pop() ?? "";
+            try {
+              await cx.mutation(api.distribution.setLiveView, {
+                id: input.jobId,
+                browserbaseSessionId: sid,
+                liveViewUrl: url,
+              });
+              savedSession = true;
+            } catch (e) {
+              logger.warn("rn:setLiveView:failed", { err: String(e) });
+            }
+          }
         },
       );
 
