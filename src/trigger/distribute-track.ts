@@ -111,6 +111,9 @@ export const distributeTrack = task({
           apiKey: anthKey,
           model: process.env.STAGEHAND_MODEL ?? "anthropic/claude-sonnet-4-6",
         },
+        (step, detail) => {
+          logger.info(`rn:${step}`, { detail });
+        },
       );
 
       await cx.mutation(api.distribution.setDraftReady, {
