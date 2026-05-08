@@ -54,24 +54,24 @@ export async function distributeToRoutenote(
 
   try {
     await log("login:goto");
-    await page.goto(SIGNIN_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    await page.goto(SIGNIN_URL, { waitUntil: "domcontentloaded", timeoutMs: 30_000 });
     await log("login:type-email");
     await stagehand.act(`Type "${creds.email}" into the email or username field`);
     await log("login:type-password");
     await stagehand.act(`Type "${creds.password}" into the password field`);
     await log("login:submit");
     await stagehand.act("Click the Login or Sign In submit button");
-    await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
+    await page.waitForLoadState("networkidle", 20_000).catch(() => {});
     await log("login:landed", page.url());
 
     await log("releases:goto");
-    await page.goto(RELEASES_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
-    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
+    await page.goto(RELEASES_URL, { waitUntil: "domcontentloaded", timeoutMs: 30_000 });
+    await page.waitForLoadState("networkidle", 15_000).catch(() => {});
     await log("releases:landed", page.url());
 
     await log("upload:click-new");
     await stagehand.act("Click the button or link to add a new release, create a new release, upload music, or start a new distribution");
-    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
+    await page.waitForLoadState("networkidle", 15_000).catch(() => {});
     await log("upload:after-click", page.url());
 
     await stagehand
@@ -85,7 +85,7 @@ export async function distributeToRoutenote(
     const audioInput = page.locator('input[type="file"]').first();
     await audioInput.setInputFiles(input.audioPath);
     await log("upload:audio-set");
-    await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+    await page.waitForLoadState("networkidle", 30_000).catch(() => {});
 
     const agent = stagehand.agent();
     const explicit = input.explicit ? "yes" : "no";
