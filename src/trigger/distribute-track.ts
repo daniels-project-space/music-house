@@ -109,7 +109,7 @@ export const distributeTrack = task({
         {
           provider: "anthropic",
           apiKey: anthKey,
-          model: process.env.STAGEHAND_MODEL ?? "claude-sonnet-4-6",
+          model: process.env.STAGEHAND_MODEL ?? "anthropic/claude-sonnet-4-6",
         },
       );
 
