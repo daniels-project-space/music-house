@@ -79,6 +79,11 @@ export const byTrack = query({
       .first(),
 });
 
+export const listAll = query({
+  args: {},
+  handler: async (ctx) => ctx.db.query("distributionJobs").order("desc").collect(),
+});
+
 export const findByTriggerRun = query({
   args: { triggerRunId: v.string() },
   handler: async (ctx, { triggerRunId }) =>

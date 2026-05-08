@@ -1,79 +1,184 @@
 "use client";
 import { useMutation, useQuery } from "convex/react";
+import { useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 export default function DistributionPage() {
   const tracks = useQuery(api.tracks.list, {}) ?? [];
+  const jobs = useQuery(api.distribution.listAll, {}) ?? [];
   const setDistributed = useMutation(api.tracks.setDistributed);
-  const ready = tracks.filter((t) => !t.distributed && !t.archivedAt);
+  const setComplete = useMutation(api.distribution.setComplete);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const jobByTrack = new Map<string, (typeof jobs)[number]>();
+  for (const j of jobs) {
+    const prev = jobByTrack.get(j.trackId);
+    if (!prev || j._creationTime > prev._creationTime) jobByTrack.set(j.trackId, j);
+  }
+
+  const active = tracks.filter((t) => {
+    const j = jobByTrack.get(t._id);
+    return j && (j.status === "pending" || j.status === "running" || j.status === "draft_ready");
+  });
+  const ready = tracks.filter((t) => {
+    if (t.distributed || t.archivedAt) return false;
+    const j = jobByTrack.get(t._id);
+    return !j || j.status === "failed";
+  });
   const done = tracks.filter((t) => t.distributed);
+
+  const startDistribute = async (trackId: Id<"tracks">) => {
+    setBusy(trackId);
+    try {
+      const r = await fetch("/api/distribute", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ trackId }),
+      });
+      if (!r.ok) alert(`Failed to start: ${await r.text()}`);
+    } catch (e) {
+      alert(`Failed: ${(e as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
     <main className="px-5 sm:px-6 lg:px-8 pt-3 pb-32 animate-fi">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <Column
-          color="#34d399"
-          label="Ready to Distribute"
-          tracks={ready.slice(0, 60)}
-          actionLabel="Distribute"
-          onAction={(id) => setDistributed({ id, distributed: true })}
-        />
-        <Column
-          color="#06b6d4"
-          label="Distributed"
-          tracks={done.slice(0, 60)}
-          actionLabel="Recall"
-          onAction={(id) => setDistributed({ id, distributed: false })}
-        />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <Column color="#34d399" label="Ready">
+          {ready.length === 0 ? (
+            <Empty />
+          ) : (
+            ready.slice(0, 80).map((t) => {
+              const j = jobByTrack.get(t._id);
+              return (
+                <Row key={t._id} track={t}>
+                  {j?.status === "failed" ? (
+                    <span className="font-mono text-[0.5rem] uppercase tracking-[0.12em] text-red mr-2" title={j.error ?? ""}>
+                      failed
+                    </span>
+                  ) : null}
+                  <button
+                    onClick={() => startDistribute(t._id as Id<"tracks">)}
+                    disabled={busy === t._id}
+                    className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2 py-1 rounded border opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-40"
+                    style={{ borderColor: "#34d399", color: "#34d399" }}
+                  >
+                    {busy === t._id ? "…" : "Distribute"}
+                  </button>
+                </Row>
+              );
+            })
+          )}
+        </Column>
+
+        <Column color="#fbbf24" label="In Progress">
+          {active.length === 0 ? (
+            <Empty />
+          ) : (
+            active.map((t) => {
+              const j = jobByTrack.get(t._id)!;
+              return (
+                <Row key={t._id} track={t}>
+                  {j.status === "draft_ready" && j.liveViewUrl ? (
+                    <>
+                      <a
+                        href={j.liveViewUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2 py-1 rounded border mr-2"
+                        style={{ borderColor: "#fbbf24", color: "#fbbf24" }}
+                      >
+                        Live view ↗
+                      </a>
+                      <button
+                        onClick={() => setComplete({ id: j._id, releaseUrl: undefined })}
+                        className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2 py-1 rounded border"
+                        style={{ borderColor: "#06b6d4", color: "#06b6d4" }}
+                      >
+                        Done
+                      </button>
+                    </>
+                  ) : (
+                    <span className="font-mono text-[0.55rem] uppercase tracking-[0.12em] text-paper-dim">
+                      {j.status === "pending" ? "queued" : j.status}
+                    </span>
+                  )}
+                </Row>
+              );
+            })
+          )}
+        </Column>
+
+        <Column color="#06b6d4" label="Distributed">
+          {done.length === 0 ? (
+            <Empty />
+          ) : (
+            done.slice(0, 80).map((t) => (
+              <Row key={t._id} track={t}>
+                <button
+                  onClick={() => setDistributed({ id: t._id as Id<"tracks">, distributed: false })}
+                  className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2 py-1 rounded border opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ borderColor: "#06b6d4", color: "#06b6d4" }}
+                >
+                  Recall
+                </button>
+              </Row>
+            ))
+          )}
+        </Column>
       </div>
     </main>
   );
 }
 
-type T = { _id: string; title: string; artistSlug: string; albumSlug?: string };
-
 function Column({
   color,
   label,
-  tracks,
-  actionLabel,
-  onAction,
+  children,
 }: {
   color: string;
   label: string;
-  tracks: T[];
-  actionLabel: string;
-  onAction: (id: Id<"tracks">) => void;
+  children: React.ReactNode;
 }) {
   return (
     <section className="rounded-lg border border-brd bg-card p-4">
-      <div className="flex items-center justify-between mb-3 pb-2" style={{ borderBottom: "1px solid " + color + "30" }}>
-        <h3 className="font-display text-[0.92rem] font-bold tracking-tight" style={{ color }}>{label}</h3>
-        <span className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint">{tracks.length} trk</span>
+      <div
+        className="flex items-center justify-between mb-3 pb-2"
+        style={{ borderBottom: "1px solid " + color + "30" }}
+      >
+        <h3 className="font-display text-[0.92rem] font-bold tracking-tight" style={{ color }}>
+          {label}
+        </h3>
       </div>
-      <ul className="space-y-0.5">
-        {tracks.length === 0 && (
-          <li className="text-center py-10 font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint/60">empty</li>
-        )}
-        {tracks.map((t) => (
-          <li key={t._id} className="group flex items-center gap-3 px-2.5 py-1.5 rounded hover:bg-paper/[0.04] transition-colors">
-            <div className="min-w-0 flex-1">
-              <div className="text-[0.78rem] font-display text-paper truncate leading-tight">{t.title}</div>
-              <div className="font-mono text-[0.52rem] uppercase tracking-[0.12em] text-paper-faint truncate mt-0.5">
-                {t.artistSlug}{t.albumSlug ? " · " + t.albumSlug : ""}
-              </div>
-            </div>
-            <button
-              onClick={() => onAction(t._id as Id<"tracks">)}
-              className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2 py-1 rounded border opacity-0 group-hover:opacity-100 transition-opacity"
-              style={{ borderColor: color, color }}
-            >
-              {actionLabel}
-            </button>
-          </li>
-        ))}
-      </ul>
+      <ul className="space-y-0.5">{children}</ul>
     </section>
+  );
+}
+
+function Empty() {
+  return (
+    <li className="text-center py-10 font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint/60">
+      empty
+    </li>
+  );
+}
+
+type T = { _id: string; title: string; artistSlug: string; albumSlug?: string };
+
+function Row({ track, children }: { track: T; children: React.ReactNode }) {
+  return (
+    <li className="group flex items-center gap-3 px-2.5 py-1.5 rounded hover:bg-paper/[0.04] transition-colors">
+      <div className="min-w-0 flex-1">
+        <div className="text-[0.78rem] font-display text-paper truncate leading-tight">{track.title}</div>
+        <div className="font-mono text-[0.52rem] uppercase tracking-[0.12em] text-paper-faint truncate mt-0.5">
+          {track.artistSlug}
+          {track.albumSlug ? " · " + track.albumSlug : ""}
+        </div>
+      </div>
+      {children}
+    </li>
   );
 }
