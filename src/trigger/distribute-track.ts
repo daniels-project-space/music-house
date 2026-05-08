@@ -63,9 +63,17 @@ export const distributeTrack = task({
       const audioExt = track.audioKey.endsWith(".flac") ? ".flac" : ".mp3";
       audioPath = await writeTempFile("audio", audioExt, audioBuf);
 
-      if (track.coverKey) {
-        const coverBuf = await getBuffer(track.coverKey);
-        const coverExt = track.coverKey.endsWith(".png") ? ".png" : ".jpg";
+      let coverKey = track.coverKey;
+      if (!coverKey && track.albumSlug) {
+        const album = await cx.query(api.albums.getOne, {
+          artistSlug: track.artistSlug,
+          slug: track.albumSlug,
+        });
+        coverKey = album?.coverKey;
+      }
+      if (coverKey) {
+        const coverBuf = await getBuffer(coverKey);
+        const coverExt = coverKey.endsWith(".png") ? ".png" : ".jpg";
         coverPath = await writeTempFile("cover", coverExt, coverBuf);
       }
 
