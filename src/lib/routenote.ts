@@ -29,6 +29,8 @@ export async function distributeToRoutenote(
     apiKey: bb.apiKey,
     projectId: bb.projectId,
     keepAlive: true,
+    disablePino: true,
+    verbose: 1,
     model: { modelName: llm.model, apiKey: llm.apiKey },
     browserbaseSessionCreateParams: {
       projectId: bb.projectId,
