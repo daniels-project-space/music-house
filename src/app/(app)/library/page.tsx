@@ -47,18 +47,31 @@ function LibraryInner() {
     tracksByAlbum.set(k, (tracksByAlbum.get(k) ?? 0) + 1);
   }
 
+  // Albums that contain at least one track matching the search term.
+  const albumsWithMatchingTrack = useMemo(() => {
+    const set = new Set<string>();
+    if (!searchNorm) return set;
+    for (const t of tracks) {
+      if (t.archivedAt) continue;
+      if (t.title.toLowerCase().includes(searchNorm)) {
+        if (t.albumSlug) set.add(`${t.artistSlug}/${t.albumSlug}`);
+      }
+    }
+    return set;
+  }, [tracks, searchNorm]);
+
   type AlbumDoc = (typeof albums)[number];
   const bySection: Record<string, AlbumDoc[]> = {};
   const otherUnsorted: AlbumDoc[] = [];
   for (const a of albums) {
     if (artistFilter && a.artistSlug !== artistFilter) continue;
-    if (
-      searchNorm &&
-      !a.name.toLowerCase().includes(searchNorm) &&
-      !a.artistSlug.toLowerCase().includes(searchNorm) &&
-      !a.slug.toLowerCase().includes(searchNorm)
-    ) {
-      continue;
+    if (searchNorm) {
+      const albumMatches =
+        a.name.toLowerCase().includes(searchNorm) ||
+        a.artistSlug.toLowerCase().includes(searchNorm) ||
+        a.slug.toLowerCase().includes(searchNorm);
+      const trackMatches = albumsWithMatchingTrack.has(`${a.artistSlug}/${a.slug}`);
+      if (!albumMatches && !trackMatches) continue;
     }
     const sec = (a as { section?: string }).section;
     if (sec && SECTIONS.some((s) => s.key === sec)) {
@@ -68,18 +81,28 @@ function LibraryInner() {
     }
   }
 
+  // Tracks shown in the bottom list. Without a search this is unsorted/singles only.
+  // With a search, every matching non-archived track is shown so the user can find songs by title.
   const unsortedTracks = useMemo(() => {
-    let list = tracks.filter((t) => !t.archivedAt && (!t.albumSlug || t.albumSlug === "_singles" || t.albumSlug === "_unsorted"));
+    let list: typeof tracks;
+    if (searchNorm) {
+      list = tracks.filter(
+        (t) => !t.archivedAt && t.title.toLowerCase().includes(searchNorm),
+      );
+    } else {
+      list = tracks.filter(
+        (t) => !t.archivedAt && (!t.albumSlug || t.albumSlug === "_singles" || t.albumSlug === "_unsorted"),
+      );
+    }
     if (artistFilter) list = list.filter((t) => t.artistSlug === artistFilter);
     if (genreFilter) list = list.filter((t) => t.genre === genreFilter);
     if (heartedOnly) list = list.filter((t) => hearted.has(t._id));
     if (stage === "ready") list = list.filter((t) => !t.distributed && !t.archivedAt);
     if (stage === "distributed") list = list.filter((t) => t.distributed);
     if (stage === "mixing") list = list.filter((t) => !t.distributed && !t.archivedAt && (t.rating ?? 0) >= 4);
-    // Newest first so freshly generated tracks land at the top of unsorted.
     list = [...list].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
     return list.slice(0, 80);
-  }, [tracks, stage, artistFilter, genreFilter, heartedOnly, hearted]);
+  }, [tracks, searchNorm, stage, artistFilter, genreFilter, heartedOnly, hearted]);
 
   return (
     <main className="px-5 sm:px-6 lg:px-8 pt-3 pb-32 animate-fi">
@@ -90,7 +113,7 @@ function LibraryInner() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search albums…"
+            placeholder="Search albums or songs…"
             className="bg-paper/[0.04] border border-brd rounded-md pl-7 pr-7 py-1.5 text-[0.78rem] text-paper outline-none focus:border-purple/50 transition-colors w-56"
           />
           <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-paper-faint text-[0.7rem]">⌕</span>
@@ -174,7 +197,7 @@ function LibraryInner() {
         )}
 
         {unsortedTracks.length > 0 && (
-          <UnsortedTracks tracks={unsortedTracks} hearted={hearted} />
+          <UnsortedTracks tracks={unsortedTracks} hearted={hearted} searching={!!searchNorm} />
         )}
       </div>
     </main>
@@ -276,6 +299,7 @@ function Grid({ albums, tracksByAlbum }: { albums: { _id: string; artistSlug: st
 function UnsortedTracks({
   tracks,
   hearted,
+  searching = false,
 }: {
   tracks: Array<{
     _id: string;
@@ -291,6 +315,7 @@ function UnsortedTracks({
     lyrics?: Array<{ text: string; start: number; isSection: boolean }>;
   }>;
   hearted: Set<string>;
+  searching?: boolean;
 }) {
   const keys = useMemo(() => tracks.map((t) => t.audioKey), [tracks]);
   useResolvedUrls(keys);
@@ -306,9 +331,9 @@ function UnsortedTracks({
     <section>
       <div className="flex items-baseline justify-between mb-4 pb-2.5" style={{ borderBottom: "1px solid rgba(251,191,36,0.25)" }}>
         <div className="flex items-baseline gap-2">
-          <span className="text-[0.95rem] text-amber leading-none">◯</span>
-          <h2 className="font-display text-[0.9rem] font-bold tracking-tight text-amber leading-none">Unsorted</h2>
-          <span className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint ml-1">drop on an album to organise</span>
+          <span className="text-[0.95rem] text-amber leading-none">{searching ? "⌕" : "◯"}</span>
+          <h2 className="font-display text-[0.9rem] font-bold tracking-tight text-amber leading-none">{searching ? "Matching tracks" : "Unsorted"}</h2>
+          {!searching && <span className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint ml-1">drop on an album to organise</span>}
         </div>
         <span className="font-mono text-[0.5rem] uppercase tracking-[0.16em] text-paper-faint">{tracks.length} trk</span>
       </div>

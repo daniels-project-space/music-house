@@ -282,7 +282,8 @@ export function AlbumEditModal({ open, onClose, albumId }: Props) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
