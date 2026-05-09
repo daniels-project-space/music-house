@@ -287,7 +287,7 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
 function ShareBtn({ artist, album, albumName }: { artist: string; album: string; albumName: string }) {
   const [copied, setCopied] = useState(false);
   const onClick = async () => {
-    const url = `${window.location.origin}/share/album/${artist}/${album}`;
+    const url = `https://mh-listen.vercel.app/${artist}/${album}`;
     try {
       const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
       if (nav.share) {

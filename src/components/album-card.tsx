@@ -243,7 +243,7 @@ function ShareMenuItem({ artist, slug, name, onClick }: { artist: string; slug: 
       onClick={async (e) => {
         e.stopPropagation();
         e.preventDefault();
-        const url = `${window.location.origin}/share/album/${artist}/${slug}`;
+        const url = `https://mh-listen.vercel.app/${artist}/${slug}`;
         try {
           const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
           if (nav.share) {
