@@ -1,5 +1,5 @@
 import "server-only";
-import { chromium, type Page, type BrowserContext } from "playwright-core";
+import { chromium, type Browser, type Page, type BrowserContext } from "playwright-core";
 
 export type DistributeInput = {
   audioPath: string;
@@ -90,12 +90,41 @@ async function fillAlbumDetails(page: Page, input: DistributeInput, log: Progres
   await page.locator("#edit_album_last_composer").fill(input.artistName.split(" ").slice(1).join(" ") || "Artist").catch(() => {});
 
   await log("album:try-save");
-  const saveBtn = page.locator('input[type="submit"][value*="Save" i], button:has-text("Save"), input[type="submit"]:has-text("Save")').first();
-  if ((await saveBtn.count()) > 0) {
-    await saveBtn.click().catch(() => {});
-    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
-    await sleep(1500);
+  await clickSaveAndDismissModal(page, "#edit-album-save-image", log, "album");
+}
+
+async function clickSaveAndDismissModal(page: Page, btnSelector: string, log: ProgressLogger, prefix: string) {
+  const btn = page.locator(btnSelector).first();
+  if ((await btn.count()) === 0) {
+    await log(`${prefix}:save-btn-not-found`);
+    return false;
   }
+  try {
+    await btn.scrollIntoViewIfNeeded({ timeout: 5000 });
+  } catch {}
+  // Cancel native confirm() popups (RouteNote uses them for some saves)
+  page.once("dialog", (d) => d.accept().catch(() => {}));
+  await btn.click({ force: true }).catch(async (e) => {
+    await log(`${prefix}:save-click-failed`, (e as Error).message);
+  });
+  await sleep(2000);
+
+  // The cldvrsn_modal() onclick may pop a custom modal — find any visible OK / Confirm / Continue button
+  for (let i = 0; i < 3; i++) {
+    const okBtn = page.locator("button:visible:has-text('OK'), button:visible:has-text('Continue'), button:visible:has-text('Confirm'), button:visible:has-text('Yes'), input[type='button'][value='OK']:visible, input[type='button'][value='Continue']:visible").first();
+    if ((await okBtn.count()) > 0) {
+      try {
+        await okBtn.click({ force: true });
+        await log(`${prefix}:modal-dismissed-${i}`);
+        await sleep(1500);
+      } catch {}
+    } else {
+      break;
+    }
+  }
+  await page.waitForLoadState("networkidle", { timeout: 12_000 }).catch(() => {});
+  await sleep(1500);
+  return true;
 }
 
 async function uploadAudio(page: Page, input: DistributeInput, log: ProgressLogger) {
@@ -132,12 +161,7 @@ async function uploadAudio(page: Page, input: DistributeInput, log: ProgressLogg
   await page.locator("#edit-tracknio1, input[name='tracknio1']").first().fill(input.title).catch(() => {});
 
   await log("audio:click-save-continue");
-  const submitBtn = page.locator("#edit-submit, input[type='submit'][value*='Save' i]").first();
-  if ((await submitBtn.count()) > 0) {
-    await submitBtn.click().catch(() => {});
-    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
-    await sleep(1500);
-  }
+  await clickSaveAndDismissModal(page, "#edit-submit", log, "audio");
   return true;
 }
 
@@ -155,14 +179,9 @@ async function uploadCover(page: Page, input: DistributeInput, log: ProgressLogg
   await fileInput.setInputFiles(input.coverPath).catch(async (e) => {
     await log("cover:setfiles-failed", (e as Error).message);
   });
-  await sleep(2500);
-  // Look for any save / continue button on this page
-  const saveBtn = page.locator('input[type="submit"][value*="Save" i], input[type="submit"][value*="Continue" i], button:has-text("Save"), button:has-text("Continue")').first();
-  if ((await saveBtn.count()) > 0) {
-    await saveBtn.click().catch(() => {});
-    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
-    await sleep(1500);
-  }
+  await sleep(3000);
+  // Cover form usually auto-saves on file change; try a save button if present.
+  await clickSaveAndDismissModal(page, "input[type='submit'][value*='Save' i], input[type='submit'][value*='Continue' i], #album_save, #edit-submit", log, "cover");
   return true;
 }
 
@@ -174,30 +193,43 @@ async function enableStores(page: Page, log: ProgressLogger) {
     await sleep(800);
   }
   await log("stores:click-save");
-  const saveBtn = page.locator("#album_save").first();
-  if ((await saveBtn.count()) > 0) {
-    await saveBtn.click().catch(() => {});
-    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
-    await sleep(1500);
-    return true;
-  }
-  return false;
+  return clickSaveAndDismissModal(page, "#album_save", log, "stores");
 }
 
 export async function distributeToRoutenote(
   input: DistributeInput,
   creds: DistributeCreds,
-  bb: { apiKey: string; projectId: string },
+  bb: { apiKey?: string; projectId?: string } | undefined,
   cookiesJson: string | undefined,
   log: ProgressLogger = () => {},
 ): Promise<DistributeResult> {
-  await log("init:create-session");
-  const session = await createBrowserbaseSession(bb);
-  const sessionId = session.id;
-  const liveViewUrl = `https://www.browserbase.com/sessions/${sessionId}`;
-  await log("init:session-created", liveViewUrl);
+  let browser: Browser | undefined;
+  let sessionId = "local";
+  let liveViewUrl = "";
 
-  const browser = await chromium.connectOverCDP(session.connectUrl);
+  // Try Browserbase if creds + a usable plan available; otherwise local chromium.
+  let usingBrowserbase = false;
+  if (bb?.apiKey && bb?.projectId) {
+    try {
+      await log("init:browserbase-attempt");
+      const session = await createBrowserbaseSession({ apiKey: bb.apiKey, projectId: bb.projectId });
+      sessionId = session.id;
+      liveViewUrl = `https://www.browserbase.com/sessions/${sessionId}`;
+      browser = await chromium.connectOverCDP(session.connectUrl);
+      usingBrowserbase = true;
+      await log("init:browserbase-ok", liveViewUrl);
+    } catch (e) {
+      await log("init:browserbase-failed-local-fallback", (e as Error).message.slice(0, 200));
+    }
+  }
+  if (!usingBrowserbase) {
+    await log("init:local-chromium");
+    browser = await chromium.launch({ headless: true });
+    sessionId = `local-${Date.now()}`;
+    liveViewUrl = "";
+  }
+  if (!browser) throw new Error("failed to launch any browser");
+
   let ctx: BrowserContext;
   let page: Page;
   let loggedIn = false;
@@ -209,7 +241,7 @@ export async function distributeToRoutenote(
   let finalUrl = "";
 
   try {
-    ctx = browser.contexts()[0];
+    ctx = browser.contexts()[0] ?? (await browser.newContext({ viewport: { width: 1440, height: 900 } }));
     page = ctx.pages()[0] ?? (await ctx.newPage());
 
     if (cookiesJson) {
@@ -319,7 +351,7 @@ export async function distributeToRoutenote(
     };
   } finally {
     try {
-      await browser.close();
+      await browser?.close();
     } catch {}
   }
 }
