@@ -42,52 +42,63 @@ export const generateSunoTrack = task({
     const cx = convexClient();
     logger.info("suno:start", { jobId: input.jobId });
 
-    const { taskId } = await suno.generate({
-      prompt: input.prompt,
-      lyrics: input.lyrics,
-      title: input.title ?? "Untitled",
-      callbackUrl: input.callbackUrl,
-    });
-    await cx.mutation(api.jobs.setRunning, { id: input.jobId, triggerRunId: `suno:${taskId}` });
+    try {
+      const { taskId } = await suno.generate({
+        prompt: input.prompt,
+        lyrics: input.lyrics,
+        title: input.title ?? "Untitled",
+        callbackUrl: input.callbackUrl,
+      });
+      await cx.mutation(api.jobs.setRunning, { id: input.jobId, triggerRunId: `suno:${taskId}` });
 
-    const tracks = await suno.pollUntilComplete(taskId, { intervalMs: 6000, timeoutMs: 8 * 60 * 1000 });
+      const tracks = await suno.pollUntilComplete(taskId, { intervalMs: 6000, timeoutMs: 8 * 60 * 1000 });
 
-    const created: Id<"tracks">[] = [];
-    let i = 0;
-    for (const t of tracks) {
-      i++;
-      const title = t.title ?? input.title ?? "Untitled";
-      const trackSlug = `${slug(title)}-${Date.now().toString(36)}${i}`;
-      const artistSlug = input.artistSlug ?? "_unsorted";
-      const albumSlug = input.albumSlug;
-      const baseKey = albumSlug
-        ? `${artistSlug}/${albumSlug}/${trackSlug}`
-        : `${artistSlug}/_singles/${trackSlug}`;
+      const created: Id<"tracks">[] = [];
+      let i = 0;
+      for (const t of tracks) {
+        i++;
+        const title = t.title ?? input.title ?? "Untitled";
+        const trackSlug = `${slug(title)}-${Date.now().toString(36)}${i}`;
+        const artistSlug = input.artistSlug ?? "_unsorted";
+        const albumSlug = input.albumSlug;
+        const baseKey = albumSlug
+          ? `${artistSlug}/${albumSlug}/${trackSlug}`
+          : `${artistSlug}/_singles/${trackSlug}`;
 
-      const audioKey = `${baseKey}.mp3`;
-      await downloadToR2(t.audioUrl, audioKey, "audio/mpeg");
+        const audioKey = `${baseKey}.mp3`;
+        await downloadToR2(t.audioUrl, audioKey, "audio/mpeg");
 
-      let coverKey: string | undefined;
-      if (t.imageUrl) {
-        coverKey = `${baseKey}.jpg`;
-        await downloadToR2(t.imageUrl, coverKey, "image/jpeg");
+        let coverKey: string | undefined;
+        if (t.imageUrl) {
+          coverKey = `${baseKey}.jpg`;
+          await downloadToR2(t.imageUrl, coverKey, "image/jpeg");
+        }
+
+        const id = await cx.mutation(api.tracks.insert, {
+          artistSlug,
+          albumSlug,
+          title,
+          duration: t.duration,
+          generator: "suno",
+          audioKey,
+          coverKey,
+          lyrics: input.lyrics ? parseLyrics(input.lyrics) : undefined,
+        });
+        created.push(id);
       }
 
-      const id = await cx.mutation(api.tracks.insert, {
-        artistSlug,
-        albumSlug,
-        title,
-        duration: t.duration,
-        generator: "suno",
-        audioKey,
-        coverKey,
-        lyrics: input.lyrics ? parseLyrics(input.lyrics) : undefined,
-      });
-      created.push(id);
+      await cx.mutation(api.jobs.setComplete, { id: input.jobId, resultTrackIds: created });
+      logger.info("suno:done", { count: created.length });
+      return { trackIds: created };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error("suno:fail", { jobId: input.jobId, error: msg });
+      try {
+        await cx.mutation(api.jobs.setFailed, { id: input.jobId, error: msg });
+      } catch (mutErr) {
+        logger.error("suno:setFailed-failed", { jobId: input.jobId, error: String(mutErr) });
+      }
+      throw err;
     }
-
-    await cx.mutation(api.jobs.setComplete, { id: input.jobId, resultTrackIds: created });
-    logger.info("suno:done", { count: created.length });
-    return { trackIds: created };
   },
 });
