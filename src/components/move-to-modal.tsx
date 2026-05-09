@@ -163,11 +163,11 @@ export function MoveToModal({ open, onClose, trackId, defaultArtistSlug, current
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/70 backdrop-blur-sm animate-fi"
+      className="fixed inset-0 z-50 grid place-items-center bg-black/70 backdrop-blur-sm animate-fi p-4 sm:p-6"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-3xl max-h-[85vh] overflow-y-auto rounded-lg border bg-elevated p-6 shadow-2xl"
+        className="w-full max-w-[min(95vw,1400px)] max-h-[90vh] overflow-y-auto rounded-lg border bg-elevated p-5 sm:p-6 shadow-2xl"
         style={{ borderColor: "var(--color-brd)" }}
         onClick={(e) => e.stopPropagation()}
       >
