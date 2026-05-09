@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
-import { use, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { TrackRow, useHeartedSet } from "@/components/track-row";
 import { KaraokeLyrics } from "@/components/karaoke-lyrics";
 import { usePlayer, type PlayerTrack } from "@/components/player-context";
@@ -18,6 +18,21 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
   const renameAlbum = useMutation(api.albums.rename);
   const setComplete = useMutation(api.albums.setComplete);
   const setDistributed = useMutation(api.tracks.setDistributed);
+
+  // Scroll to a #track-<id> hash once the tracks have loaded.
+  useEffect(() => {
+    if (!tracks || tracks.length === 0) return;
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash;
+    if (!hash || !hash.startsWith("#track-")) return;
+    const el = document.getElementById(hash.slice(1));
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("ring-2", "ring-pink/60");
+      const timer = setTimeout(() => el.classList.remove("ring-2", "ring-pink/60"), 2400);
+      return () => clearTimeout(timer);
+    }
+  }, [tracks]);
 
   const allKeys = useMemo(() => {
     const k: string[] = [];
@@ -212,23 +227,24 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
         <p className="font-mono text-[0.5rem] uppercase tracking-[0.22em] text-paper-faint mb-4">Tracks</p>
         <div className="rounded-md bg-card/30 backdrop-blur p-2 space-y-0.5">
           {sorted.map((t, i) => (
-            <TrackRow
-              key={t._id}
-              trackId={t._id}
-              trackNum={t.trackNum}
-              title={t.title}
-              artistSlug={t.artistSlug}
-              albumSlug={t.albumSlug}
-              duration={t.duration}
-              generator={t.generator}
-              audioKey={t.audioKey}
-              hearted={hearted.has(t._id)}
-              onShowLyrics={() => setLyricsTrackId(t._id)}
-              queue={queue}
-              index={i}
-              size="comfortable"
-              genre={t.genre}
-            />
+            <div key={t._id} id={`track-${t._id}`} className="scroll-mt-24">
+              <TrackRow
+                trackId={t._id}
+                trackNum={t.trackNum}
+                title={t.title}
+                artistSlug={t.artistSlug}
+                albumSlug={t.albumSlug}
+                duration={t.duration}
+                generator={t.generator}
+                audioKey={t.audioKey}
+                hearted={hearted.has(t._id)}
+                onShowLyrics={() => setLyricsTrackId(t._id)}
+                queue={queue}
+                index={i}
+                size="comfortable"
+                genre={t.genre}
+              />
+            </div>
           ))}
         </div>
       </div>

@@ -76,47 +76,43 @@ export function Player() {
           }}
         >
           <div className="px-5 sm:px-6 lg:px-8 py-3 flex items-center gap-4 sm:gap-5">
-            {/* Album sleeve + slim vinyl peeking out behind */}
+            {/* Album sleeve + slim vinyl peeking out to the right */}
             <Link
-              href={`/track/${current.id}`}
-              aria-label={`Open ${current.title}`}
-              className="relative w-[88px] h-14 shrink-0 group"
+              href={`/library/${current.artist}/${current.album ?? "_singles"}#track-${current.id}`}
+              aria-label={`Jump to ${current.title}`}
+              className="relative w-[80px] h-14 shrink-0 group"
             >
-              {/* Vinyl: slim, behind the cover, half-visible to the right */}
+              {/* Slim vinyl behind, ~half visible peeking out right of cover */}
               <div
                 className={
-                  "absolute top-1/2 right-0 -translate-y-1/2 w-12 h-12 rounded-full vinyl " +
+                  "absolute top-1 right-0 w-12 h-12 rounded-full vinyl z-0 " +
                   (playing ? "animate-vinyl animate-vinyl-glow" : "")
                 }
-                style={{ transform: "translate(20%, -50%)" }}
               >
-                {current.coverUrl ? (
-                  <div className="absolute inset-[40%] rounded-full overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={current.coverUrl} alt="" className="w-full h-full object-cover opacity-70" />
-                  </div>
-                ) : (
-                  <div className="absolute inset-[40%] rounded-full bg-gradient-to-br from-pink/40 to-purple/40" />
-                )}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-paper/70" />
+                <div className="absolute inset-[42%] rounded-full bg-paper/80" />
               </div>
               {/* Square cover sleeve in front */}
               <div
-                className="absolute top-0 left-0 w-14 h-14 rounded-md overflow-hidden ring-1 ring-paper/10 group-hover:ring-purple/40 transition-shadow"
-                style={{ boxShadow: "2px 2px 8px rgba(0,0,0,0.5)" }}
+                className="absolute top-0 left-0 w-14 h-14 rounded-md overflow-hidden ring-1 ring-paper/10 group-hover:ring-purple/40 transition-all bg-paper/[0.04] z-10"
+                style={{ boxShadow: "2px 2px 10px rgba(0,0,0,0.55)" }}
               >
                 {current.coverUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={current.coverUrl} alt="" className="w-full h-full object-cover" />
+                  <img
+                    src={current.coverUrl}
+                    alt={current.title}
+                    className="w-full h-full object-cover"
+                    draggable={false}
+                  />
                 ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-pink/40 to-purple/40" />
+                  <div className="w-full h-full grid place-items-center bg-gradient-to-br from-pink/40 to-purple/40 text-paper text-base">♪</div>
                 )}
               </div>
             </Link>
 
-            {/* Track info — fixed width, click to open track page */}
+            {/* Track info — fixed width, click to jump to track in album */}
             <Link
-              href={`/track/${current.id}`}
+              href={`/library/${current.artist}/${current.album ?? "_singles"}#track-${current.id}`}
               className="w-[160px] sm:w-[200px] shrink-0 min-w-0 hover:opacity-80 transition-opacity"
             >
               <div className="text-[0.78rem] text-paper truncate font-display font-semibold leading-tight">{current.title}</div>
