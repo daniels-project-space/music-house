@@ -117,4 +117,10 @@ export default defineSchema({
     .index("by_track", ["trackId"])
     .index("by_status", ["status"])
     .index("by_trigger_run", ["triggerRunId"]),
+
+  distributorAuth: defineTable({
+    distributor: v.literal("routenote"),
+    cookiesJson: v.string(),
+    savedAt: v.number(),
+  }).index("by_distributor", ["distributor"]),
 });

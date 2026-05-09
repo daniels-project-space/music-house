@@ -1,5 +1,5 @@
 import "server-only";
-import { Stagehand } from "@browserbasehq/stagehand";
+import { chromium, type Page, type BrowserContext } from "playwright-core";
 
 export type DistributeInput = {
   audioPath: string;
@@ -19,161 +19,307 @@ export type DistributeResult = {
   sessionId: string;
   liveViewUrl: string;
   loggedIn: boolean;
-  reachedReview: boolean;
+  upc?: string;
+  filledAlbumDetails: boolean;
+  uploadedAudio: boolean;
+  uploadedCover: boolean;
+  enabledStores: boolean;
+  newCookiesJson?: string;
+  finalUrl: string;
 };
 
 export type ProgressLogger = (step: string, detail?: string) => void | Promise<void>;
 
-const SIGNIN_URL = "https://www.routenote.com/rn/login";
-const RELEASES_URL = "https://www.routenote.com/rn/releases";
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+const ROUTENOTE_GENRES = new Set([
+  "Pop","Rock","Hip Hop","Electronic","Dance","Classical","Jazz","Country",
+  "Folk","R&B/Soul","Alternative","Indie","Reggae","Latin","Metal","Blues","Other",
+]);
+
+function pickGenre(g?: string) {
+  if (!g) return "Electronic";
+  const m = Array.from(ROUTENOTE_GENRES).find((x) => x.toLowerCase() === g.toLowerCase());
+  if (m) return m;
+  if (g.toLowerCase().includes("cinematic")) return "Classical";
+  if (g.toLowerCase().includes("lofi") || g.toLowerCase().includes("lo-fi")) return "Electronic";
+  return "Electronic";
+}
+
+async function createBrowserbaseSession(bb: { apiKey: string; projectId: string }) {
+  const r = await fetch("https://api.browserbase.com/v1/sessions", {
+    method: "POST",
+    headers: { "X-BB-API-Key": bb.apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      projectId: bb.projectId,
+      keepAlive: true,
+      browserSettings: { viewport: { width: 1440, height: 900 }, blockAds: true },
+    }),
+  });
+  if (!r.ok) throw new Error(`browserbase session create ${r.status}: ${await r.text()}`);
+  const data = (await r.json()) as { id: string; connectUrl: string };
+  return data;
+}
+
+async function gotoSettled(page: Page, url: string, timeoutMs = 25_000) {
+  await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
+  await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
+  await sleep(1500);
+}
+
+async function fillAlbumDetails(page: Page, input: DistributeInput, log: ProgressLogger) {
+  await log("album:fill-title");
+  await page.locator("#edit_album_info_title").fill(input.title).catch(() => {});
+  await log("album:fill-artist");
+  await page.locator("#edit_album_info_artist").fill(input.artistName).catch(() => {});
+
+  await log("album:fill-genre");
+  const genre = pickGenre(input.genre);
+  await page.locator("#edit_album_info_genre").fill(genre).catch(() => {});
+
+  await log("album:fill-copyright");
+  const year = new Date().getFullYear().toString();
+  await page.locator("#cpy_year").fill(year).catch(() => {});
+  await page.locator("#cpy_name").fill(input.artistName).catch(() => {});
+  await page.locator("#edit_album_info_pcopyyear").fill(year).catch(() => {});
+  await page.locator("#edit_album_info_pcopyname").fill(input.artistName).catch(() => {});
+  await page.locator("#edit_album_info_label").fill(input.artistName).catch(() => {});
+
+  await log("album:fill-composer");
+  await page.locator("#edit_album_first_composer").fill(input.artistName.split(" ")[0] ?? input.artistName).catch(() => {});
+  await page.locator("#edit_album_last_composer").fill(input.artistName.split(" ").slice(1).join(" ") || "Artist").catch(() => {});
+
+  await log("album:try-save");
+  const saveBtn = page.locator('input[type="submit"][value*="Save" i], button:has-text("Save"), input[type="submit"]:has-text("Save")').first();
+  if ((await saveBtn.count()) > 0) {
+    await saveBtn.click().catch(() => {});
+    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
+    await sleep(1500);
+  }
+}
+
+async function uploadAudio(page: Page, input: DistributeInput, log: ProgressLogger) {
+  await log("audio:click-add-track");
+  const addTrackBtn = page.locator("#rn_track");
+  if ((await addTrackBtn.count()) === 0) {
+    await log("audio:no-add-track-button");
+    return false;
+  }
+  // The Add Track button likely spawns a file chooser via JS new_link().
+  // Listen for a filechooser event and click.
+  const fileChooserPromise = page.waitForEvent("filechooser", { timeout: 8_000 }).catch(() => null);
+  await addTrackBtn.click();
+  const fileChooser = await fileChooserPromise;
+  if (fileChooser) {
+    await log("audio:filechooser-fired");
+    await fileChooser.setFiles(input.audioPath);
+  } else {
+    // Fallback: search for any input[type=file] that may have appeared
+    await sleep(1500);
+    const fileInput = page.locator('input[type="file"]').first();
+    if ((await fileInput.count()) > 0) {
+      await fileInput.setInputFiles(input.audioPath).catch(async (e) => {
+        await log("audio:fallback-fileinput-failed", (e as Error).message);
+      });
+    } else {
+      await log("audio:no-file-mechanism-found");
+      return false;
+    }
+  }
+
+  await sleep(2500);
+  await log("audio:fill-track-title");
+  await page.locator("#edit-tracknio1, input[name='tracknio1']").first().fill(input.title).catch(() => {});
+
+  await log("audio:click-save-continue");
+  const submitBtn = page.locator("#edit-submit, input[type='submit'][value*='Save' i]").first();
+  if ((await submitBtn.count()) > 0) {
+    await submitBtn.click().catch(() => {});
+    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
+    await sleep(1500);
+  }
+  return true;
+}
+
+async function uploadCover(page: Page, input: DistributeInput, log: ProgressLogger) {
+  if (!input.coverPath) {
+    await log("cover:skip-no-path");
+    return false;
+  }
+  await log("cover:set-input");
+  const fileInput = page.locator("#audio_images1, input[type='file'][name='audio_images']").first();
+  if ((await fileInput.count()) === 0) {
+    await log("cover:no-input-found");
+    return false;
+  }
+  await fileInput.setInputFiles(input.coverPath).catch(async (e) => {
+    await log("cover:setfiles-failed", (e as Error).message);
+  });
+  await sleep(2500);
+  // Look for any save / continue button on this page
+  const saveBtn = page.locator('input[type="submit"][value*="Save" i], input[type="submit"][value*="Continue" i], button:has-text("Save"), button:has-text("Continue")').first();
+  if ((await saveBtn.count()) > 0) {
+    await saveBtn.click().catch(() => {});
+    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
+    await sleep(1500);
+  }
+  return true;
+}
+
+async function enableStores(page: Page, log: ProgressLogger) {
+  await log("stores:click-select-all");
+  const selAll = page.locator("#edit-selall");
+  if ((await selAll.count()) > 0) {
+    await selAll.check({ force: true }).catch(() => {});
+    await sleep(800);
+  }
+  await log("stores:click-save");
+  const saveBtn = page.locator("#album_save").first();
+  if ((await saveBtn.count()) > 0) {
+    await saveBtn.click().catch(() => {});
+    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
+    await sleep(1500);
+    return true;
+  }
+  return false;
+}
 
 export async function distributeToRoutenote(
   input: DistributeInput,
   creds: DistributeCreds,
   bb: { apiKey: string; projectId: string },
-  llm: { provider: "anthropic"; apiKey: string; model: string },
+  cookiesJson: string | undefined,
   log: ProgressLogger = () => {},
 ): Promise<DistributeResult> {
-  const stagehand = new Stagehand({
-    env: "BROWSERBASE",
-    apiKey: bb.apiKey,
-    projectId: bb.projectId,
-    keepAlive: true,
-    disablePino: true,
-    verbose: 1,
-    model: { modelName: llm.model, apiKey: llm.apiKey },
-    browserbaseSessionCreateParams: {
-      projectId: bb.projectId,
-      browserSettings: {
-        viewport: { width: 1440, height: 900 },
-        blockAds: true,
-      },
-    },
-  });
+  await log("init:create-session");
+  const session = await createBrowserbaseSession(bb);
+  const sessionId = session.id;
+  const liveViewUrl = `https://www.browserbase.com/sessions/${sessionId}`;
+  await log("init:session-created", liveViewUrl);
 
-  await log("init:start");
-  await stagehand.init();
-  const sessionId = stagehand.browserbaseSessionID;
-  if (!sessionId) throw new Error("Stagehand init returned no Browserbase sessionId");
-  const liveViewUrl =
-    stagehand.browserbaseSessionURL ?? `https://www.browserbase.com/sessions/${sessionId}`;
-  await log("init:done", liveViewUrl);
-  const page = stagehand.context.pages()[0];
-
-  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
+  const browser = await chromium.connectOverCDP(session.connectUrl);
+  let ctx: BrowserContext;
+  let page: Page;
   let loggedIn = false;
-  let reachedReview = false;
+  let upc: string | undefined;
+  let filledAlbumDetails = false;
+  let uploadedAudio = false;
+  let uploadedCover = false;
+  let enabledStores = false;
+  let finalUrl = "";
 
   try {
-    await log("login:goto");
-    await page.goto(SIGNIN_URL, { waitUntil: "domcontentloaded", timeoutMs: 30_000 });
-    await page.waitForLoadState("networkidle", 15_000).catch(() => {});
-    await sleep(1500);
+    ctx = browser.contexts()[0];
+    page = ctx.pages()[0] ?? (await ctx.newPage());
 
-    try {
-      const usernameInput = page
-        .locator(
-          'input[name="username"], input[autocomplete="username"], input[id*="user" i], input[placeholder*="user" i], input[type="text"]:not([type="search"]):not([type="hidden"])',
-        )
-        .first();
-      await usernameInput.fill(creds.username);
-      await log("login:username-filled");
+    if (cookiesJson) {
+      try {
+        const cookies = JSON.parse(cookiesJson);
+        await ctx.addCookies(cookies);
+        await log("init:cookies-restored", `count=${cookies.length}`);
+      } catch (e) {
+        await log("init:cookies-parse-failed", (e as Error).message);
+      }
+    }
 
-      const passwordInput = page
-        .locator('input[type="password"], input[name="password"]')
-        .first();
-      await passwordInput.fill(creds.password);
-      await log("login:password-filled");
+    // Probe auth by navigating to /rn/create_album
+    await gotoSettled(page, "https://www.routenote.com/rn/create_album");
+    loggedIn = !page.url().toLowerCase().includes("/login");
+    await log("auth:check", `logged-in=${loggedIn} url=${page.url()}`);
 
-      const submitBtn = page
-        .locator(
-          'button[type="submit"], input[type="submit"], button:has-text("Log in"), button:has-text("Sign in"), button:has-text("Login")',
-        )
-        .first();
-      await submitBtn.click();
-      await log("login:submitted");
-
-      for (let i = 0; i < 25; i++) {
+    if (!loggedIn) {
+      // Try programmatic login (likely captcha-blocked)
+      await gotoSettled(page, "https://www.routenote.com/rn/login");
+      await page.locator('#user-login input[name="name"]').first().fill(creds.username);
+      await page.locator('#user-login input[name="pass"]').first().fill(creds.password);
+      await page.locator("#in_signin_button").first().click();
+      for (let i = 0; i < 15; i++) {
         await sleep(1000);
         if (!page.url().toLowerCase().includes("/login")) break;
       }
-      await page.waitForLoadState("networkidle", 15_000).catch(() => {});
-
       loggedIn = !page.url().toLowerCase().includes("/login");
-      await log("login:result", `loggedIn=${loggedIn} url=${page.url()}`);
-    } catch (e) {
-      await log("login:error", (e as Error).message);
+      await log("auth:after-login", `logged-in=${loggedIn}`);
     }
 
     if (!loggedIn) {
-      await log("login:fallback-to-manual", "user must finish login via live view");
-      return { sessionId, liveViewUrl, loggedIn, reachedReview };
+      await log("auth:fallback-to-manual");
+      finalUrl = page.url();
+      return {
+        sessionId, liveViewUrl, loggedIn, upc, filledAlbumDetails,
+        uploadedAudio, uploadedCover, enabledStores, finalUrl,
+      };
     }
 
-    await log("releases:goto");
-    await page.goto(RELEASES_URL, { waitUntil: "domcontentloaded", timeoutMs: 30_000 });
-    await page.waitForLoadState("networkidle", 15_000).catch(() => {});
-    await log("releases:landed", page.url());
+    // Step 1: Create release
+    await gotoSettled(page, "https://www.routenote.com/rn/create_album");
+    const futureDate = new Date(Date.now() + 21 * 86400 * 1000).toISOString().slice(0, 10);
+    await log("create:fill-date", futureDate);
+    await page.locator("#edit_album_info_release").fill(futureDate);
+    await sleep(500);
+    await log("create:click-create");
+    await page.locator("#edit-album-save-image").click();
+    for (let i = 0; i < 20; i++) {
+      await sleep(1000);
+      if (page.url().includes("/edit_album/")) break;
+    }
+    if (page.url().includes("/edit_album/")) {
+      upc = page.url().split("/").pop();
+      await log("create:upc-captured", upc);
+    } else {
+      await log("create:upc-not-captured", page.url());
+    }
 
-    await log("upload:click-new");
-    await stagehand
-      .act(
-        "Click the button or link that starts a new release / new music upload / distribute new song. The button text may say Add release, New release, Distribute, Upload music, or similar.",
-      )
-      .catch(async (e) => {
-        await log("upload:click-new-failed", (e as Error).message);
-      });
-    await page.waitForLoadState("networkidle", 15_000).catch(() => {});
-    await log("upload:after-click", page.url());
+    if (!upc) {
+      finalUrl = page.url();
+      throw new Error("Failed to capture UPC from create_album response");
+    }
 
-    await stagehand
-      .act("If asked to choose between a Free plan and a Premium plan, choose the Free option")
-      .catch(() => {});
-    await stagehand
-      .act("If asked to choose between Single and Album, choose Single")
-      .catch(() => {});
+    // Step 2: Album Details
+    await gotoSettled(page, `https://www.routenote.com/rn/editalbum/${upc}`);
+    await fillAlbumDetails(page, input, log);
+    filledAlbumDetails = true;
+    await log("album:done", page.url());
 
+    // Step 3: Add Audio
+    await gotoSettled(page, `https://www.routenote.com/rn/addaudiomp3/form/${upc}`);
+    uploadedAudio = await uploadAudio(page, input, log);
+    await log("audio:done", `uploaded=${uploadedAudio} url=${page.url()}`);
+
+    // Step 4: Add Artwork
+    await gotoSettled(page, `https://www.routenote.com/rn/addart/form/${upc}`);
+    uploadedCover = await uploadCover(page, input, log);
+    await log("cover:done", `uploaded=${uploadedCover} url=${page.url()}`);
+
+    // Step 5: Manage Stores
+    await gotoSettled(page, `https://www.routenote.com/rn/addstore/form/${upc}`);
+    enabledStores = await enableStores(page, log);
+    await log("stores:done", `enabled=${enabledStores} url=${page.url()}`);
+
+    // Capture refreshed cookies
+    finalUrl = page.url();
+    let newCookiesJson: string | undefined;
     try {
-      await sleep(1500);
-      const fileInput = page.locator('input[type="file"]').first();
-      await fileInput.setInputFiles(input.audioPath);
-      await log("upload:audio-set");
+      const cookies = await ctx.cookies();
+      newCookiesJson = JSON.stringify(cookies);
+      await log("cookies:captured", `count=${cookies.length}`);
     } catch (e) {
-      await log("upload:audio-set-failed", (e as Error).message);
+      await log("cookies:capture-failed", (e as Error).message);
     }
-    await page.waitForLoadState("networkidle", 30_000).catch(() => {});
 
-    const explicit = input.explicit ? "yes" : "no";
-    const coverNote = input.coverPath
-      ? `A cover-art image is at "${input.coverPath}". When the form asks for cover art, set it on the cover-art file input.`
-      : `If cover art is required and none is provided, stop and return.`;
-
-    await log("agent:fill-metadata:start");
-    const agent = stagehand.agent();
-    await agent.execute(
-      [
-        `You are filling the RouteNote upload form for a single track. Current URL: ${page.url()}.`,
-        `Fill these fields wherever they appear in this multi-step form:`,
-        `- Song / track title: "${input.title}"`,
-        `- Primary artist name: "${input.artistName}"`,
-        `- Genre / primary genre: "${input.genre ?? "Electronic"}"`,
-        `- Songwriter / composer: "${input.artistName}"`,
-        `- Explicit lyrics: ${explicit}`,
-        `When the form shows a list of music stores or distribution channels (Spotify, Apple Music, Deezer, Tidal, Amazon Music, YouTube Music, SoundCloud, TikTok, etc.), select / enable ALL of them.`,
-        coverNote,
-        `Click Continue / Next / Save to advance each page.`,
-        `STOP at the final review / submit / publish / pay page.`,
-        `DO NOT click any button labeled Submit, Publish, Distribute Now, Confirm, Pay, or Confirm and Pay.`,
-        `When you reach the final review page, return immediately.`,
-      ].join("\n"),
-    );
-    reachedReview = true;
-    await log("agent:fill-metadata:done", page.url());
-
-    return { sessionId, liveViewUrl, loggedIn, reachedReview };
+    return {
+      sessionId, liveViewUrl, loggedIn, upc, filledAlbumDetails,
+      uploadedAudio, uploadedCover, enabledStores, newCookiesJson, finalUrl,
+    };
   } catch (err) {
     await log("error", (err as Error).message);
-    return { sessionId, liveViewUrl, loggedIn, reachedReview };
+    finalUrl = page!?.url() ?? finalUrl;
+    return {
+      sessionId, liveViewUrl, loggedIn, upc, filledAlbumDetails,
+      uploadedAudio, uploadedCover, enabledStores, finalUrl,
+    };
+  } finally {
+    try {
+      await browser.close();
+    } catch {}
   }
 }

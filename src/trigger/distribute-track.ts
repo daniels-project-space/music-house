@@ -77,10 +77,9 @@ export const distributeTrack = task({
         coverPath = await writeTempFile("cover", coverExt, coverBuf);
       }
 
-      const [rn, bb, anth] = await Promise.all([
+      const [rn, bb] = await Promise.all([
         getServiceSecrets("routenote"),
         getServiceSecrets("browserbase"),
-        getServiceSecrets("anthropic"),
       ]);
 
       const username = rn.ROUTENOTE_USERNAME ?? rn.USERNAME ?? rn.ROUTENOTE_EMAIL ?? rn.EMAIL;
@@ -93,11 +92,12 @@ export const distributeTrack = task({
       if (!bbApiKey || !bbProjectId) {
         throw new Error("vault browserbase: missing BROWSERBASE_API_KEY or BROWSERBASE_PROJECT_ID");
       }
-      const anthKey = anth.ANTHROPIC_API_KEY;
-      if (!anthKey) throw new Error("vault anthropic: missing ANTHROPIC_API_KEY");
+
+      const savedAuth = await cx.query(api.distributorAuth.get, { distributor: "routenote" });
+      const cookiesJson = savedAuth?.cookiesJson;
 
       let savedSession = false;
-      const { sessionId, liveViewUrl, loggedIn, reachedReview } = await distributeToRoutenote(
+      const result = await distributeToRoutenote(
         {
           audioPath,
           coverPath,
@@ -107,14 +107,10 @@ export const distributeTrack = task({
         },
         { username, password },
         { apiKey: bbApiKey, projectId: bbProjectId },
-        {
-          provider: "anthropic",
-          apiKey: anthKey,
-          model: process.env.STAGEHAND_MODEL ?? "anthropic/claude-sonnet-4-6",
-        },
+        cookiesJson,
         async (step, detail) => {
           logger.info(`rn:${step}`, { detail });
-          if (!savedSession && step === "init:done" && detail) {
+          if (!savedSession && step === "init:session-created" && detail) {
             const url = detail;
             const sid = url.split("/").pop() ?? "";
             try {
@@ -131,19 +127,35 @@ export const distributeTrack = task({
         },
       );
 
+      if (result.newCookiesJson) {
+        try {
+          await cx.mutation(api.distributorAuth.save, {
+            distributor: "routenote",
+            cookiesJson: result.newCookiesJson,
+          });
+        } catch (e) {
+          logger.warn("rn:save-cookies-failed", { err: String(e) });
+        }
+      }
+
       await cx.mutation(api.distribution.setDraftReady, {
         id: input.jobId,
-        browserbaseSessionId: sessionId,
-        liveViewUrl,
+        browserbaseSessionId: result.sessionId,
+        liveViewUrl: result.liveViewUrl,
       });
 
       logger.info("distribute:draft_ready", {
         jobId: input.jobId,
-        liveViewUrl,
-        loggedIn,
-        reachedReview,
+        liveViewUrl: result.liveViewUrl,
+        loggedIn: result.loggedIn,
+        upc: result.upc,
+        filledAlbumDetails: result.filledAlbumDetails,
+        uploadedAudio: result.uploadedAudio,
+        uploadedCover: result.uploadedCover,
+        enabledStores: result.enabledStores,
+        finalUrl: result.finalUrl,
       });
-      return { sessionId, liveViewUrl, loggedIn, reachedReview };
+      return result;
     } catch (err) {
       const msg = (err as Error).message ?? String(err);
       logger.error("distribute:failed", { jobId: input.jobId, error: msg });
