@@ -44,8 +44,14 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
   const coverUrl = albumRow?.coverKey ? urls[albumRow.coverKey] ?? null : null;
 
   const [lyricsTrackId, setLyricsTrackId] = useState<string | null>(null);
+  const [lyricsExpanded, setLyricsExpanded] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState("");
+
+  // Whenever a new track is selected for lyrics, default to collapsed
+  useEffect(() => {
+    setLyricsExpanded(false);
+  }, [lyricsTrackId]);
 
   if (!tracks || !albumRow) {
     return (
@@ -205,21 +211,46 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
       </div>
 
       {lyricsTrack && (
-        <div className="rounded-md border border-brd/60 bg-bg2/40 p-5 mb-10 max-w-3xl">
-          <div className="flex items-center justify-between mb-3">
-            <span className="font-mono text-[0.55rem] uppercase tracking-[0.22em] text-purple">Lyrics · {lyricsTrack.title}</span>
+        <div className="rounded-md border border-brd/60 bg-bg2/40 mb-10 max-w-3xl overflow-hidden">
+          <div className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-paper/[0.03] transition-colors">
             <button
-              onClick={() => setLyricsTrackId(null)}
-              className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint hover:text-paper"
+              type="button"
+              onClick={() => setLyricsExpanded((v) => !v)}
+              className="flex items-center gap-3 min-w-0 flex-1 text-left cursor-pointer"
+              aria-expanded={lyricsExpanded}
             >
-              clear
+              <span
+                className="font-mono text-[0.65rem] text-paper-dim transition-transform"
+                style={{ transform: lyricsExpanded ? "rotate(90deg)" : "rotate(0deg)" }}
+              >
+                ▶
+              </span>
+              <span className="font-mono text-[0.55rem] uppercase tracking-[0.22em] text-purple truncate">
+                Lyrics · {lyricsTrack.title}
+              </span>
+              {!lyricsExpanded ? (
+                <span className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint">
+                  ({lyricsTrack.lyrics?.length ? `${lyricsTrack.lyrics.length} lines` : "no lyrics"})
+                </span>
+              ) : null}
+            </button>
+            <button
+              type="button"
+              onClick={() => setLyricsTrackId(null)}
+              className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint hover:text-paper px-1.5 py-0.5"
+            >
+              ✕
             </button>
           </div>
-          <KaraokeLyrics
-            title={lyricsTrack.title}
-            lyrics={lyricsTrack.lyrics ?? []}
-            trackId={lyricsTrack._id}
-          />
+          {lyricsExpanded ? (
+            <div className="px-5 pb-5">
+              <KaraokeLyrics
+                title={lyricsTrack.title}
+                lyrics={lyricsTrack.lyrics ?? []}
+                trackId={lyricsTrack._id}
+              />
+            </div>
+          ) : null}
         </div>
       )}
 

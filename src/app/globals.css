@@ -79,6 +79,14 @@ body::after {
   body > * { position: relative; z-index: 1; }
 }
 
+/* Share/public mode: hide sidebar + global bottom player so the share page is self-contained */
+body.share-mode aside,
+body.share-mode .lg\:hidden:first-child,
+body.share-mode > div > div > div:first-child > div:first-child > div.lg\:hidden,
+body.share-mode > div + div { display: none !important; }
+body.share-mode .lg\:left-\[220px\] { left: 0 !important; }
+body.share-mode > div > div > div:nth-child(2) { padding-left: 0 !important; }
+
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(139, 92, 246, 0.18); border-radius: 3px; }
