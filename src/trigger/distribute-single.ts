@@ -1,4 +1,4 @@
-import { task, logger } from "@trigger.dev/sdk/v3";
+import { task, logger, tasks } from "@trigger.dev/sdk/v3";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -6,6 +6,7 @@ import { getBuffer } from "../lib/storage";
 import { distributeRouteNoteHttp, type CookieEntry } from "../lib/routenote-http";
 import { submitDistributeFreePlaywright } from "../lib/routenote-playwright";
 import { normalizeForRouteNote } from "../lib/audio-normalize";
+import type { refreshRoutenoteAuthNow } from "./refresh-routenote-auth";
 
 function convexClient() {
   const url = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -71,14 +72,31 @@ export const distributeSingle = task({
       audioContentType = normalized.contentType;
     }
 
-    // Get RouteNote cookies
-    const auth = await cx.query(api.distributorAuth.get, { distributor: "routenote" });
-    if (!auth?.cookiesJson) {
-      const msg = "no RouteNote cookies — bootstrap auth first";
-      await cx.mutation(api.distribution.setFailed, { id: input.jobId, error: msg });
-      throw new Error(msg);
+    // Get RouteNote cookies — self-heal if missing/expired by firing refreshRoutenoteAuthNow
+    async function loadCookies(): Promise<CookieEntry[]> {
+      const auth = await cx.query(api.distributorAuth.get, { distributor: "routenote" });
+      if (!auth?.cookiesJson) return [];
+      return JSON.parse(auth.cookiesJson) as CookieEntry[];
     }
-    const cookies = JSON.parse(auth.cookiesJson) as CookieEntry[];
+    let cookies = await loadCookies();
+    if (cookies.length === 0) {
+      logger.info("no RouteNote cookies — auto-refreshing");
+      const handle = await tasks.triggerAndWait<typeof refreshRoutenoteAuthNow>(
+        "refresh-routenote-auth-now",
+        {},
+      );
+      if (!handle.ok) {
+        const msg = "auto-refresh failed; bootstrap manually";
+        await cx.mutation(api.distribution.setFailed, { id: input.jobId, error: msg });
+        throw new Error(msg);
+      }
+      cookies = await loadCookies();
+      if (cookies.length === 0) {
+        const msg = "auth refresh succeeded but no cookies in Convex";
+        await cx.mutation(api.distribution.setFailed, { id: input.jobId, error: msg });
+        throw new Error(msg);
+      }
+    }
 
     const artistName = humanizeSlug(track.artistSlug);
 
@@ -112,9 +130,37 @@ export const distributeSingle = task({
     }
 
     if (!result.loggedIn) {
-      const msg = "RouteNote auth expired — re-bootstrap cookies";
-      await cx.mutation(api.distribution.setFailed, { id: input.jobId, error: msg });
-      throw new Error(msg);
+      // Auth expired mid-pipeline — refresh cookies and retry the entire flow once.
+      logger.warn("auth expired during distribute; firing auto-refresh and retrying");
+      const refreshHandle = await tasks.triggerAndWait<typeof refreshRoutenoteAuthNow>(
+        "refresh-routenote-auth-now",
+        {},
+      );
+      if (!refreshHandle.ok) {
+        const msg = "auth expired and auto-refresh failed";
+        await cx.mutation(api.distribution.setFailed, { id: input.jobId, error: msg });
+        throw new Error(msg);
+      }
+      cookies = await loadCookies();
+      result = await distributeRouteNoteHttp(
+        {
+          releaseType: "single",
+          releaseTitle: track.title,
+          artistName,
+          genre: track.genre,
+          explicit: false,
+          tracks: [{ audioBuffer: finalAudioBuffer, audioFilename, audioContentType, title: track.title }],
+          coverBuffer,
+          coverFilename: coverKey ? coverKey.split("/").pop() : undefined,
+        },
+        cookies,
+        (step, detail) => logger.info(`rn:${step}`, { detail }),
+      );
+      if (!result.loggedIn) {
+        const msg = "auth still failed after refresh — RouteNote credentials may be wrong";
+        await cx.mutation(api.distribution.setFailed, { id: input.jobId, error: msg });
+        throw new Error(msg);
+      }
     }
     if (!result.upc) {
       const detail = result.steps.map((s) => `${s.step}=${s.ok ? "ok" : "FAIL"}${s.detail ? "(" + s.detail.slice(0, 60) + ")" : ""}`).join(" | ");
