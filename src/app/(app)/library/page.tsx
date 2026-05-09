@@ -76,6 +76,8 @@ function LibraryInner() {
     if (stage === "ready") list = list.filter((t) => !t.distributed && !t.archivedAt);
     if (stage === "distributed") list = list.filter((t) => t.distributed);
     if (stage === "mixing") list = list.filter((t) => !t.distributed && !t.archivedAt && (t.rating ?? 0) >= 4);
+    // Newest first so freshly generated tracks land at the top of unsorted.
+    list = [...list].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
     return list.slice(0, 80);
   }, [tracks, stage, artistFilter, genreFilter, heartedOnly, hearted]);
 
@@ -284,6 +286,8 @@ function UnsortedTracks({
     generator: "suno" | "mureka" | "import";
     audioKey: string;
     trackNum?: number;
+    createdAt?: number;
+    genre?: string;
   }>;
   hearted: Set<string>;
 }) {
@@ -322,6 +326,8 @@ function UnsortedTracks({
             hearted={hearted.has(t._id)}
             queue={queue}
             index={i}
+            genre={t.genre}
+            createdAt={t.createdAt}
           />
         ))}
       </div>

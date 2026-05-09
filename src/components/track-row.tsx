@@ -26,7 +26,24 @@ type TrackRowProps = {
   index?: number;
   size?: "compact" | "comfortable";
   genre?: string;
+  createdAt?: number;
 };
+
+function formatRelative(ts: number): string {
+  const now = Date.now();
+  const diff = now - ts;
+  if (diff < 0) return new Date(ts).toLocaleDateString();
+  const m = Math.floor(diff / 60_000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d ago`;
+  const date = new Date(ts);
+  const sameYear = date.getFullYear() === new Date().getFullYear();
+  return date.toLocaleDateString(undefined, sameYear ? { month: "short", day: "numeric" } : { year: "numeric", month: "short", day: "numeric" });
+}
 
 export function TrackRow({
   trackId,
@@ -39,6 +56,7 @@ export function TrackRow({
   audioKey,
   coverUrl,
   coverKey,
+  createdAt,
   hearted,
   onShowLyrics,
   queue,
@@ -217,7 +235,7 @@ export function TrackRow({
         <div className={"font-mono text-t3 truncate leading-tight " + (size === "comfortable" ? "text-[0.62rem] mt-1" : "text-[0.5rem] mt-0.5")}>
           {artistSlug}
           {albumSlug ? " · " + albumSlug : ""}
-          <span className={"ml-1.5 " + (size === "comfortable" ? "text-[0.55rem]" : "text-[0.46rem]")} style={{ color: generator === "suno" ? "#ec4899" : "#8b5cf6" }}>◆ {generator}</span>{genre ? <span className={"ml-2 px-1.5 py-0.5 rounded " + (size === "comfortable" ? "text-[0.5rem]" : "text-[0.44rem]")} style={{ background: "rgba(139,92,246,0.08)", color: "#a78bfa" }}>{genre}</span> : null}
+          <span className={"ml-1.5 " + (size === "comfortable" ? "text-[0.55rem]" : "text-[0.46rem]")} style={{ color: generator === "suno" ? "#ec4899" : "#8b5cf6" }}>◆ {generator}</span>{genre ? <span className={"ml-2 px-1.5 py-0.5 rounded " + (size === "comfortable" ? "text-[0.5rem]" : "text-[0.44rem]")} style={{ background: "rgba(139,92,246,0.08)", color: "#a78bfa" }}>{genre}</span> : null}{createdAt ? <span className={"ml-2 " + (size === "comfortable" ? "text-[0.5rem]" : "text-[0.44rem]")} title={new Date(createdAt).toLocaleString()}>· {formatRelative(createdAt)}</span> : null}
         </div>
       </div>
       <span className={"font-mono text-t3 text-right shrink-0 tabular-nums " + (size === "comfortable" ? "text-[0.68rem] w-12" : "text-[0.56rem] w-9")}>{dur}</span>

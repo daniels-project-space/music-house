@@ -275,6 +275,7 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
                 index={i}
                 size="comfortable"
                 genre={t.genre}
+                createdAt={t.createdAt}
               />
             </div>
           ))}
