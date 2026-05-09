@@ -4,8 +4,8 @@
   --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  --color-bg: #050608;
-  --color-bg2: #0a0c12;
+  --color-bg: #0c1424;
+  --color-bg2: #131c30;
   --color-card: rgba(14, 17, 24, 0.92);
   --color-surface: rgba(20, 24, 33, 0.85);
   --color-elevated: rgba(28, 33, 45, 0.9);
@@ -46,7 +46,7 @@
 html, body {
   font-family: var(--font-display);
   color: var(--color-t1);
-  background: #050608;
+  background: #0c1424;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
