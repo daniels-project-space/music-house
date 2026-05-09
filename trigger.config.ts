@@ -1,4 +1,5 @@
 import { defineConfig } from "@trigger.dev/sdk/v3";
+import { playwright } from "@trigger.dev/build/extensions/playwright";
 
 // Trigger.dev project for Music House. Provision separately via:
 //   npm run trigger:dev   (one-time login, creates project)
@@ -13,4 +14,8 @@ export default defineConfig({
     default: { maxAttempts: 3, minTimeoutInMs: 1000, maxTimeoutInMs: 10000, factor: 2, randomize: true },
   },
   dirs: ["./src/trigger"],
+  build: {
+    external: ["playwright-core", "playwright"],
+    extensions: [playwright({ browsers: ["chromium"], headless: true })],
+  },
 });
