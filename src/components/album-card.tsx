@@ -1,10 +1,11 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { useUrlCache } from "./url-cache-provider";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { AlbumEditModal } from "./album-edit-modal";
 
 type Props = {
   albumId?: Id<"albums">;
@@ -23,7 +24,19 @@ export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, s
   const moveTrack = useMutation(api.tracks.move);
   const removeAlbum = useMutation(api.albums.removeAndOrphan);
   const [trackOver, setTrackOver] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const href = `/library/${artist}/${slug}`;
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [menuOpen]);
 
   const onDragStart = (e: React.DragEvent) => {
     if (!albumId) return;
@@ -139,19 +152,57 @@ export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, s
           {trackCount} trk
         </span>
         {albumId && (
-          <button
-            type="button"
-            onClick={handleDelete}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full grid place-items-center opacity-0 group-hover:opacity-100 transition-all text-paper hover:scale-110"
-            style={{ background: "rgba(5,6,8,0.85)", border: "1px solid rgba(255,255,255,0.12)", backdropFilter: "blur(8px)" }}
-            aria-label={`Delete album ${name}`}
-            title="Delete album"
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M6 6l12 12M18 6L6 18" />
-            </svg>
-          </button>
+          <div ref={menuRef} className="absolute top-1.5 right-1.5">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                setMenuOpen((v) => !v);
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              className={"w-6 h-6 rounded-full grid place-items-center transition-all text-paper hover:scale-110 " + (menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100")}
+              style={{ background: "rgba(5,6,8,0.85)", border: "1px solid rgba(255,255,255,0.12)", backdropFilter: "blur(8px)" }}
+              aria-label={`Album menu for ${name}`}
+              title="Album menu"
+            >
+              <span className="font-bold leading-none -mt-0.5">⋮</span>
+            </button>
+            {menuOpen && (
+              <div
+                className="absolute right-0 top-7 z-30 w-36 rounded-md border bg-elevated shadow-2xl py-1 animate-fi"
+                style={{ borderColor: "var(--color-brd)" }}
+                onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    setMenuOpen(false);
+                    setEditOpen(true);
+                  }}
+                  className="w-full px-3 py-1.5 text-[0.7rem] text-left flex items-center gap-2.5 text-paper hover:bg-purple/[0.08] hover:text-purple transition-colors"
+                >
+                  <span className="text-[0.75rem] w-4 text-center">✎</span>
+                  <span className="font-display">Edit</span>
+                </button>
+                <div className="my-1 mx-2 h-px bg-brd" />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    setMenuOpen(false);
+                    handleDelete(e);
+                  }}
+                  className="w-full px-3 py-1.5 text-[0.7rem] text-left flex items-center gap-2.5 text-red hover:bg-red/[0.06] transition-colors"
+                >
+                  <span className="text-[0.75rem] w-4 text-center">🗑</span>
+                  <span className="font-display">Delete</span>
+                </button>
+              </div>
+            )}
+          </div>
         )}
         {trackOver && (
           <div className="absolute inset-0 grid place-items-center pointer-events-none" style={{ background: "rgba(236,72,153,0.22)" }}>
@@ -167,6 +218,13 @@ export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, s
           {artist}
         </p>
       </div>
+      {albumId ? (
+        <AlbumEditModal
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          albumId={albumId}
+        />
+      ) : null}
     </div>
   );
 }

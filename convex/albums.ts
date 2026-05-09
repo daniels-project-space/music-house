@@ -89,3 +89,46 @@ export const remove = mutation({
   args: { id: v.id("albums") },
   handler: async (ctx, { id }) => ctx.db.delete(id),
 });
+
+export const reassignArtist = mutation({
+  args: { id: v.id("albums"), newArtistSlug: v.string() },
+  handler: async (ctx, { id, newArtistSlug }) => {
+    const album = await ctx.db.get(id);
+    if (!album) throw new Error("album not found");
+    const oldArtist = album.artistSlug;
+    const albumSlug = album.slug;
+    if (oldArtist === newArtistSlug) return id;
+    const tracks = await ctx.db
+      .query("tracks")
+      .withIndex("by_artist_album", (q) =>
+        q.eq("artistSlug", oldArtist).eq("albumSlug", albumSlug),
+      )
+      .collect();
+    for (const t of tracks) {
+      await ctx.db.patch(t._id, { artistSlug: newArtistSlug });
+    }
+    await ctx.db.patch(id, { artistSlug: newArtistSlug });
+    return id;
+  },
+});
+
+export const setMeta = mutation({
+  args: {
+    id: v.id("albums"),
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    genre: v.optional(v.string()),
+    section: v.optional(v.string()),
+    coverKey: v.optional(v.string()),
+  },
+  handler: async (ctx, { id, ...patch }) => {
+    const album = await ctx.db.get(id);
+    if (!album) throw new Error("album not found");
+    const fields: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(patch)) {
+      if (v !== undefined) fields[k] = v;
+    }
+    if (Object.keys(fields).length > 0) await ctx.db.patch(id, fields);
+    return id;
+  },
+});
