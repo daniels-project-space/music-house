@@ -288,6 +288,7 @@ function UnsortedTracks({
     trackNum?: number;
     createdAt?: number;
     genre?: string;
+    lyrics?: Array<{ text: string; start: number; isSection: boolean }>;
   }>;
   hearted: Set<string>;
 }) {
@@ -328,6 +329,7 @@ function UnsortedTracks({
             index={i}
             genre={t.genre}
             createdAt={t.createdAt}
+            lyrics={t.lyrics}
           />
         ))}
       </div>

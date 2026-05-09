@@ -8,6 +8,8 @@ import { usePlayer, type PlayerTrack } from "./player-context";
 import { useUrlCache } from "./url-cache-provider";
 import { MoveToModal } from "./move-to-modal";
 
+type LyricLine = { text: string; start: number; isSection: boolean };
+
 type TrackRowProps = {
   trackId: Id<"tracks">;
   trackNum?: number;
@@ -22,6 +24,8 @@ type TrackRowProps = {
   coverKey?: string;
   hearted: boolean;
   onShowLyrics?: () => void;
+  /** Track's lyrics (used by built-in fallback modal when onShowLyrics isn't provided) */
+  lyrics?: LyricLine[];
   queue?: PlayerTrack[];
   index?: number;
   size?: "compact" | "comfortable";
@@ -57,6 +61,7 @@ export function TrackRow({
   coverUrl,
   coverKey,
   createdAt,
+  lyrics,
   hearted,
   onShowLyrics,
   queue,
@@ -78,6 +83,7 @@ export function TrackRow({
   const { ensure, get } = useUrlCache();
   const [menuOpen, setMenuOpen] = useState(false);
   const [moveModalOpen, setMoveModalOpen] = useState(false);
+  const [lyricsOpen, setLyricsOpen] = useState(false);
   const [dragOver, setDragOver] = useState<"above" | "below" | null>(null);
   const [distributing, setDistributing] = useState(false);
   const [distributePanelOpen, setDistributePanelOpen] = useState(false);
@@ -262,7 +268,7 @@ export function TrackRow({
             style={{ borderColor: "var(--color-brd)" }}
           >
             <Item icon="✎" label="Rename" onClick={() => { setMenuOpen(false); setEditing(true); }} />
-            <Item icon="♪" label="Lyrics" onClick={() => { setMenuOpen(false); onShowLyrics?.(); }} />
+            <Item icon="♪" label="Lyrics" onClick={() => { setMenuOpen(false); if (onShowLyrics) onShowLyrics(); else setLyricsOpen(true); }} />
             <Item icon="→" label="Move to…" onClick={() => { setMenuOpen(false); setMoveModalOpen(true); }} />
             <Item icon="📡" label="Distribute" onClick={startDistribute} />
             <Item icon="✓" label="Mark distributed" onClick={() => { setDistributed({ id: trackId, distributed: true }); setMenuOpen(false); }} />
@@ -341,6 +347,51 @@ export function TrackRow({
         defaultArtistSlug={artistSlug}
         currentAlbumSlug={albumSlug}
       />
+      {lyricsOpen && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 backdrop-blur-sm animate-fi p-4"
+          onClick={() => setLyricsOpen(false)}
+        >
+          <div
+            className="w-full max-w-xl max-h-[85vh] overflow-y-auto rounded-lg border bg-elevated p-5 shadow-2xl"
+            style={{ borderColor: "var(--color-brd)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3 pb-3" style={{ borderBottom: "1px solid var(--color-brd)" }}>
+              <div>
+                <p className="font-display text-paper text-[1rem] font-semibold leading-tight">{title}</p>
+                <p className="font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint mt-1">Lyrics</p>
+              </div>
+              <button
+                onClick={() => setLyricsOpen(false)}
+                className="font-mono text-[0.7rem] text-t3 hover:text-paper transition-colors"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            {lyrics && lyrics.length > 0 ? (
+              <div className="space-y-1">
+                {lyrics.map((l, i) =>
+                  l.isSection ? (
+                    <p key={i} className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-purple mt-3 first:mt-0">
+                      {l.text}
+                    </p>
+                  ) : (
+                    <p key={i} className="font-display text-[0.85rem] text-paper leading-relaxed">
+                      {l.text}
+                    </p>
+                  ),
+                )}
+              </div>
+            ) : (
+              <p className="font-mono text-[0.7rem] text-paper-faint py-6 text-center">
+                No lyrics saved on this track.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

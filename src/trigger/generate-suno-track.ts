@@ -11,6 +11,20 @@ function convexClient() {
   return new ConvexHttpClient(url);
 }
 
+// Parse plain-text lyrics into the structured shape the schema expects.
+// Section headers like [Verse 1] are flagged as isSection=true.
+function parseLyrics(text: string): Array<{ text: string; start: number; isSection: boolean }> {
+  return text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .map((l) => ({
+      text: l,
+      start: 0,
+      isSection: /^\[.+\]$/.test(l),
+    }));
+}
+
 export type SunoGenerateInput = {
   jobId: Id<"generationJobs">;
   prompt: string;
@@ -67,6 +81,7 @@ export const generateSunoTrack = task({
         generator: "suno",
         audioKey,
         coverKey,
+        lyrics: input.lyrics ? parseLyrics(input.lyrics) : undefined,
       });
       created.push(id);
     }
