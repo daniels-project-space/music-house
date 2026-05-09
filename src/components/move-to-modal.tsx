@@ -10,53 +10,97 @@ type MoveToModalProps = {
   onClose: () => void;
   // Track-mode: when set, an album select moves the track. Otherwise creates album only.
   trackId?: Id<"tracks">;
-  artistSlug: string;
+  // If provided, defaults artist & current album for context.
+  defaultArtistSlug?: string;
   currentAlbumSlug?: string;
 };
 
 type View = "select" | "new";
 
-export function MoveToModal({ open, onClose, trackId, artistSlug, currentAlbumSlug }: MoveToModalProps) {
+const CATEGORIES = [
+  { key: "all", label: "All categories" },
+  { key: "film_cinematic", label: "Film & Cinematic" },
+  { key: "artist_songs", label: "Artist Songs" },
+  { key: "gaming", label: "Gaming" },
+] as const;
+
+function slugify(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+}
+
+const ADD_NEW_ARTIST = "__add_new_artist__";
+
+export function MoveToModal({ open, onClose, trackId, defaultArtistSlug, currentAlbumSlug }: MoveToModalProps) {
   const [view, setView] = useState<View>("select");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [category, setCategory] = useState<string>("all");
+
   // New-album form state
+  const [artistChoice, setArtistChoice] = useState<string>("");
+  const [newArtistName, setNewArtistName] = useState("");
   const [newName, setNewName] = useState("");
   const [newStyle, setNewStyle] = useState("");
   const [newDescription, setNewDescription] = useState("");
 
   const move = useMutation(api.tracks.move);
-  const albums = useQuery(api.albums.list, open ? { artistSlug } : "skip") ?? [];
+
+  const allAlbums = useQuery(api.albums.list, open ? {} : "skip") ?? [];
+  const allArtists = useQuery(api.artists.list, open ? {} : "skip") ?? [];
+
+  const visibleAlbums = useMemo(() => {
+    if (category === "all") return allAlbums;
+    return allAlbums.filter((a) => (a as { section?: string }).section === category);
+  }, [allAlbums, category]);
+
   const coverKeys = useMemo(
-    () => albums.map((a) => a.coverKey).filter((k): k is string => !!k),
-    [albums],
+    () => visibleAlbums.map((a) => a.coverKey).filter((k): k is string => !!k),
+    [visibleAlbums],
   );
   useResolvedUrls(coverKeys);
   const { get } = useUrlCache();
 
   useEffect(() => {
-    if (!open) {
-      // Reset on close
+    if (open) {
+      // Reasonable defaults when opening
       setView("select");
       setBusy(false);
       setError(null);
       setNewName("");
       setNewStyle("");
       setNewDescription("");
+      setNewArtistName("");
+      setArtistChoice(defaultArtistSlug ?? "");
     }
-  }, [open]);
+  }, [open, defaultArtistSlug]);
 
   if (!open) return null;
 
-  const moveToAlbum = async (targetAlbumSlug: string | undefined) => {
+  const moveToAlbum = async (album: { artistSlug: string; slug: string }) => {
     if (!trackId) {
       onClose();
       return;
     }
     setBusy(true);
     try {
-      await move({ id: trackId, targetArtistSlug: artistSlug, targetAlbumSlug });
+      await move({ id: trackId, targetArtistSlug: album.artistSlug, targetAlbumSlug: album.slug });
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const moveToUnsorted = async () => {
+    if (!trackId || !defaultArtistSlug) {
+      onClose();
+      return;
+    }
+    setBusy(true);
+    try {
+      await move({ id: trackId, targetArtistSlug: defaultArtistSlug, targetAlbumSlug: undefined });
       onClose();
     } catch (e) {
       setError((e as Error).message);
@@ -70,6 +114,22 @@ export function MoveToModal({ open, onClose, trackId, artistSlug, currentAlbumSl
       setError("Album name required");
       return;
     }
+    let artistSlug: string | undefined;
+    let createNewArtist: string | undefined;
+    if (artistChoice === ADD_NEW_ARTIST) {
+      if (!newArtistName.trim()) {
+        setError("New artist name required");
+        return;
+      }
+      createNewArtist = newArtistName.trim();
+      artistSlug = slugify(newArtistName.trim());
+    } else if (artistChoice) {
+      artistSlug = artistChoice;
+    } else {
+      setError("Pick an artist (or add a new one)");
+      return;
+    }
+
     setBusy(true);
     setError(null);
     try {
@@ -78,19 +138,20 @@ export function MoveToModal({ open, onClose, trackId, artistSlug, currentAlbumSl
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           artistSlug,
+          newArtistName: createNewArtist,
           name: newName.trim(),
           style: newStyle.trim() || undefined,
           description: newDescription.trim() || undefined,
+          section: category === "all" ? undefined : category,
         }),
       });
       if (!r.ok) {
-        const t = await r.text();
-        setError(`Create failed: ${t.slice(0, 200)}`);
+        setError(`Create failed: ${(await r.text()).slice(0, 200)}`);
         return;
       }
-      const { slug } = (await r.json()) as { slug: string };
+      const j = (await r.json()) as { slug: string; artistSlug: string };
       if (trackId) {
-        await move({ id: trackId, targetArtistSlug: artistSlug, targetAlbumSlug: slug });
+        await move({ id: trackId, targetArtistSlug: j.artistSlug, targetAlbumSlug: j.slug });
       }
       onClose();
     } catch (e) {
@@ -99,8 +160,6 @@ export function MoveToModal({ open, onClose, trackId, artistSlug, currentAlbumSl
       setBusy(false);
     }
   };
-
-  const otherAlbums = albums.filter((a) => a.slug !== currentAlbumSlug);
 
   return (
     <div
@@ -113,14 +172,9 @@ export function MoveToModal({ open, onClose, trackId, artistSlug, currentAlbumSl
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-baseline justify-between mb-4 pb-3" style={{ borderBottom: "1px solid var(--color-brd)" }}>
-          <div className="flex items-baseline gap-3">
-            <h2 className="font-display text-[1.05rem] font-bold text-paper">
-              {view === "new" ? "Create New Album" : trackId ? "Move track to..." : "Albums"}
-            </h2>
-            <span className="font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint">
-              {artistSlug}
-            </span>
-          </div>
+          <h2 className="font-display text-[1.05rem] font-bold text-paper">
+            {view === "new" ? "Create new album" : trackId ? "Move track to…" : "Albums"}
+          </h2>
           <button
             onClick={onClose}
             className="font-mono text-[0.7rem] text-t3 hover:text-paper transition-colors"
@@ -132,9 +186,30 @@ export function MoveToModal({ open, onClose, trackId, artistSlug, currentAlbumSl
 
         {view === "select" ? (
           <>
+            <div className="flex items-center gap-3 mb-4 flex-wrap">
+              <span className="font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint">Category</span>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="bg-paper/[0.04] border rounded-md px-2 py-1 text-paper text-[0.78rem] focus:outline-none focus:border-purple/50"
+                style={{ borderColor: "var(--color-brd)" }}
+              >
+                {CATEGORIES.map((c) => (
+                  <option key={c.key} value={c.key}>{c.label}</option>
+                ))}
+              </select>
+              <div className="flex-1" />
+              <button
+                onClick={() => setView("new")}
+                className="px-3 py-1.5 rounded-md bg-purple text-paper font-display text-[0.78rem] hover:bg-purple/90 transition-colors"
+              >
+                + Create new album
+              </button>
+            </div>
+
             {trackId && currentAlbumSlug ? (
               <button
-                onClick={() => moveToAlbum(undefined)}
+                onClick={moveToUnsorted}
                 disabled={busy}
                 className="w-full mb-4 px-4 py-3 rounded-md border text-left font-display text-[0.85rem] text-paper hover:bg-paper/[0.05] transition-colors disabled:opacity-50"
                 style={{ borderColor: "var(--color-brd)" }}
@@ -148,30 +223,17 @@ export function MoveToModal({ open, onClose, trackId, artistSlug, currentAlbumSl
               className="grid"
               style={{ gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "1rem" }}
             >
-              <button
-                onClick={() => setView("new")}
-                className="aspect-square rounded-md border-2 border-dashed flex flex-col items-center justify-center transition-colors hover:bg-purple/[0.06]"
-                style={{ borderColor: "rgba(139,92,246,0.4)" }}
-              >
-                <span className="text-3xl text-purple mb-1.5">+</span>
-                <span className="font-display text-[0.75rem] font-medium text-purple">New Album</span>
-                <span className="font-mono text-[0.55rem] uppercase tracking-[0.14em] text-paper-faint mt-0.5">
-                  flux-generated cover
-                </span>
-              </button>
-
-              {otherAlbums.length === 0 && albums.length === 0 ? (
+              {visibleAlbums.length === 0 ? (
                 <div className="col-span-full text-center py-8 font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint/60">
-                  no albums yet for {artistSlug}
+                  no albums in {CATEGORIES.find((c) => c.key === category)?.label.toLowerCase()}
                 </div>
               ) : null}
-
-              {otherAlbums.map((a) => {
+              {visibleAlbums.filter((a) => a.slug !== currentAlbumSlug).map((a) => {
                 const url = a.coverKey ? get(a.coverKey) : undefined;
                 return (
                   <button
                     key={a._id}
-                    onClick={() => moveToAlbum(a.slug)}
+                    onClick={() => moveToAlbum({ artistSlug: a.artistSlug, slug: a.slug })}
                     disabled={busy}
                     className="group flex flex-col text-left disabled:opacity-50"
                   >
@@ -190,7 +252,7 @@ export function MoveToModal({ open, onClose, trackId, artistSlug, currentAlbumSl
                     </div>
                     <div className="mt-2 font-display text-[0.78rem] text-paper truncate">{a.name}</div>
                     <div className="font-mono text-[0.52rem] uppercase tracking-[0.12em] text-paper-faint truncate">
-                      {a.slug}
+                      {a.artistSlug}
                     </div>
                   </button>
                 );
@@ -199,7 +261,52 @@ export function MoveToModal({ open, onClose, trackId, artistSlug, currentAlbumSl
           </>
         ) : (
           <div className="flex flex-col gap-3 max-w-lg mx-auto">
-            <Field label="Album name *" hint="What's it called?">
+            <Field label="Artist *">
+              <select
+                value={artistChoice}
+                onChange={(e) => setArtistChoice(e.target.value)}
+                className="w-full px-3 py-2 rounded-md bg-paper/[0.04] border text-paper text-[0.85rem] focus:outline-none focus:border-purple/50"
+                style={{ borderColor: "var(--color-brd)" }}
+                disabled={busy}
+              >
+                <option value="">Pick an artist…</option>
+                <option value={ADD_NEW_ARTIST}>+ Add new artist</option>
+                <option disabled>──────────</option>
+                {allArtists.length === 0 ? (
+                  <option disabled>(no artists yet)</option>
+                ) : null}
+                {allArtists.map((a) => (
+                  <option key={a._id} value={a.slug}>{a.name}</option>
+                ))}
+              </select>
+            </Field>
+            {artistChoice === ADD_NEW_ARTIST ? (
+              <Field label="New artist name *">
+                <input
+                  value={newArtistName}
+                  onChange={(e) => setNewArtistName(e.target.value)}
+                  placeholder="e.g. Iron Horizon"
+                  className="w-full px-3 py-2 rounded-md bg-paper/[0.04] border text-paper text-[0.85rem] focus:outline-none focus:border-purple/50"
+                  style={{ borderColor: "var(--color-brd)" }}
+                  disabled={busy}
+                />
+              </Field>
+            ) : null}
+            <Field label="Category">
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full px-3 py-2 rounded-md bg-paper/[0.04] border text-paper text-[0.85rem] focus:outline-none focus:border-purple/50"
+                style={{ borderColor: "var(--color-brd)" }}
+                disabled={busy}
+              >
+                <option value="all">No category</option>
+                {CATEGORIES.filter((c) => c.key !== "all").map((c) => (
+                  <option key={c.key} value={c.key}>{c.label}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Album name *">
               <input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
@@ -214,18 +321,18 @@ export function MoveToModal({ open, onClose, trackId, artistSlug, currentAlbumSl
               <input
                 value={newStyle}
                 onChange={(e) => setNewStyle(e.target.value)}
-                placeholder="e.g. cinematic synthwave, lo-fi cafe, dark electronic"
+                placeholder="e.g. cinematic synthwave, lo-fi cafe"
                 className="w-full px-3 py-2 rounded-md bg-paper/[0.04] border text-paper text-[0.85rem] focus:outline-none focus:border-purple/50"
                 style={{ borderColor: "var(--color-brd)" }}
                 disabled={busy}
               />
             </Field>
-            <Field label="Description / mood" hint="Optional — adds to cover prompt">
+            <Field label="Description / mood" hint="Optional">
               <textarea
                 value={newDescription}
                 onChange={(e) => setNewDescription(e.target.value)}
                 rows={3}
-                placeholder="e.g. moody late-night warm tones, vintage tape texture"
+                placeholder="e.g. moody late-night warm tones"
                 className="w-full px-3 py-2 rounded-md bg-paper/[0.04] border text-paper text-[0.8rem] focus:outline-none focus:border-purple/50 resize-none"
                 style={{ borderColor: "var(--color-brd)" }}
                 disabled={busy}
@@ -237,7 +344,7 @@ export function MoveToModal({ open, onClose, trackId, artistSlug, currentAlbumSl
             <div className="flex items-center gap-2 mt-1">
               <button
                 onClick={createAndMaybeMove}
-                disabled={busy || !newName.trim()}
+                disabled={busy || !newName.trim() || !artistChoice}
                 className="flex-1 px-4 py-2.5 rounded-md bg-purple text-paper font-display text-[0.85rem] hover:bg-purple/90 transition-colors disabled:opacity-50"
               >
                 {busy ? "Generating cover…" : trackId ? "Create + move track" : "Create album"}
@@ -252,7 +359,7 @@ export function MoveToModal({ open, onClose, trackId, artistSlug, currentAlbumSl
               </button>
             </div>
             <p className="font-mono text-[0.55rem] uppercase tracking-[0.16em] text-paper-faint mt-2">
-              Cover is generated by Flux Schnell (~5s, ~$0.003)
+              Cover via Flux Schnell (~5s, ~$0.003)
             </p>
           </div>
         )}

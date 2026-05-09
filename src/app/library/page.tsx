@@ -27,6 +27,7 @@ function LibraryInner() {
   const [genreFilter, setGenreFilter] = useState("");
   const [artistFilter, setArtistFilter] = useState("");
   const [heartedOnly, setHeartedOnly] = useState(false);
+  const [newAlbumOpen, setNewAlbumOpen] = useState(false);
 
   const genres = useMemo(() => {
     const set = new Set<string>();
@@ -104,7 +105,18 @@ function LibraryInner() {
         <span className="ml-auto font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint">
           {tracks.length} trk · {albums.length} alb · {artists.length} artists
         </span>
+        <button
+          onClick={() => setNewAlbumOpen(true)}
+          className="px-3 py-1.5 rounded-md bg-purple text-paper font-display text-[0.78rem] hover:bg-purple/90 transition-colors"
+        >
+          + Create new album
+        </button>
       </div>
+      <MoveToModal
+        open={newAlbumOpen}
+        onClose={() => setNewAlbumOpen(false)}
+        defaultArtistSlug={artistFilter || undefined}
+      />
 
       <div className="space-y-16">
         {SECTIONS.map((s) => {
@@ -214,46 +226,25 @@ function Section({
   );
 }
 
-function Grid({ albums, tracksByAlbum, defaultArtistSlug }: { albums: { _id: string; artistSlug: string; slug: string; name: string; coverKey?: string; section?: string }[]; tracksByAlbum: Map<string, number>; defaultArtistSlug?: string }) {
-  const [newAlbumOpen, setNewAlbumOpen] = useState(false);
-  const fallbackArtist = defaultArtistSlug || albums[0]?.artistSlug || "_unsorted";
+function Grid({ albums, tracksByAlbum }: { albums: { _id: string; artistSlug: string; slug: string; name: string; coverKey?: string; section?: string }[]; tracksByAlbum: Map<string, number> }) {
   return (
-    <>
-      <div
-        className="grid"
-        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "2rem 1.75rem" }}
-      >
-        {albums.map((a) => (
-          <AlbumCard
-            key={a._id}
-            albumId={a._id as never}
-            artist={a.artistSlug}
-            slug={a.slug}
-            name={a.name}
-            trackCount={tracksByAlbum.get(`${a.artistSlug}/${a.slug}`) ?? 0}
-            coverKey={a.coverKey}
-            section={a.section}
-          />
-        ))}
-        <button
-          onClick={() => setNewAlbumOpen(true)}
-          className="aspect-square rounded-md border-2 border-dashed flex flex-col items-center justify-center transition-colors hover:bg-purple/[0.06] focus:outline-none focus:ring-2 focus:ring-purple/40"
-          style={{ borderColor: "rgba(139,92,246,0.4)" }}
-          title={`Create new album under ${fallbackArtist}`}
-        >
-          <span className="text-4xl text-purple mb-1.5 leading-none">+</span>
-          <span className="font-display text-[0.8rem] font-medium text-purple">New Album</span>
-          <span className="font-mono text-[0.55rem] uppercase tracking-[0.14em] text-paper-faint mt-1">
-            flux cover
-          </span>
-        </button>
-      </div>
-      <MoveToModal
-        open={newAlbumOpen}
-        onClose={() => setNewAlbumOpen(false)}
-        artistSlug={fallbackArtist}
-      />
-    </>
+    <div
+      className="grid"
+      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "2rem 1.75rem" }}
+    >
+      {albums.map((a) => (
+        <AlbumCard
+          key={a._id}
+          albumId={a._id as never}
+          artist={a.artistSlug}
+          slug={a.slug}
+          name={a.name}
+          trackCount={tracksByAlbum.get(`${a.artistSlug}/${a.slug}`) ?? 0}
+          coverKey={a.coverKey}
+          section={a.section}
+        />
+      ))}
+    </div>
   );
 }
 

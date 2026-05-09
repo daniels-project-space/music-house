@@ -313,7 +313,7 @@ export function TrackRow({
         open={moveModalOpen}
         onClose={() => setMoveModalOpen(false)}
         trackId={trackId}
-        artistSlug={artistSlug}
+        defaultArtistSlug={artistSlug}
         currentAlbumSlug={albumSlug}
       />
     </div>

@@ -7,7 +7,8 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 type Body = {
-  artistSlug: string;
+  artistSlug?: string;
+  newArtistName?: string;
   slug?: string;
   name: string;
   style?: string;
@@ -87,8 +88,30 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: "invalid json" }, { status: 400 });
   }
-  if (!body.artistSlug || !body.name) {
-    return Response.json({ error: "artistSlug and name required" }, { status: 400 });
+  if (!body.name) {
+    return Response.json({ error: "name required" }, { status: 400 });
+  }
+
+  // Resolve artistSlug — either pre-existing slug or create a new artist on the fly.
+  let artistSlug = body.artistSlug;
+  if (body.newArtistName) {
+    const trimmed = body.newArtistName.trim();
+    if (!trimmed) {
+      return Response.json({ error: "newArtistName empty" }, { status: 400 });
+    }
+    const newSlug = slugify(trimmed);
+    if (!newSlug) {
+      return Response.json({ error: "could not derive artist slug" }, { status: 400 });
+    }
+    await cx.mutation(api.artists.upsert, {
+      slug: newSlug,
+      name: trimmed,
+      genres: [],
+    });
+    artistSlug = newSlug;
+  }
+  if (!artistSlug) {
+    return Response.json({ error: "artistSlug or newArtistName required" }, { status: 400 });
   }
 
   const slug = body.slug ? slugify(body.slug) : slugify(body.name);
@@ -113,14 +136,14 @@ export async function POST(req: Request) {
   let coverKey: string | undefined;
   try {
     const buf = await generateCoverViaFlux(prompt, replicateToken);
-    coverKey = `${body.artistSlug}/${slug}/cover.jpg`;
+    coverKey = `${artistSlug}/${slug}/cover.jpg`;
     await put(coverKey, buf, "image/jpeg");
   } catch (e) {
     return Response.json({ error: `cover generation failed: ${(e as Error).message}` }, { status: 500 });
   }
 
   const albumId = await cx.mutation(api.albums.upsert, {
-    artistSlug: body.artistSlug,
+    artistSlug,
     slug,
     name: body.name,
     description: body.description,
@@ -129,5 +152,5 @@ export async function POST(req: Request) {
     section: body.section,
   });
 
-  return Response.json({ albumId, slug, coverKey });
+  return Response.json({ albumId, slug, artistSlug, coverKey });
 }
