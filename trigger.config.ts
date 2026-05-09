@@ -15,7 +15,9 @@ export default defineConfig({
   build: {
     external: ["playwright-core", "playwright"],
     extensions: [
-      playwright({ browsers: ["chromium"], headless: true }),
+      // Bundle both chromium and the headless-shell variant. The Trigger build extension's
+      // setup script greps for "chromium-headless-shell" specifically when headless: true.
+      playwright({ browsers: ["chromium", "chromium-headless-shell"], headless: true }),
       ffmpeg(),
       additionalPackages({ packages: ["curl"] }),
     ],
