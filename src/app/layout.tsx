@@ -4,6 +4,7 @@ import { PlayerProvider } from "@/components/player-context";
 import { UrlCacheProvider } from "@/components/url-cache-provider";
 import { GlobalUrlPrefetch } from "@/components/global-url-prefetch";
 import { DragAutoScroll } from "@/components/drag-autoscroll";
+import { Player } from "@/components/player";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <GlobalUrlPrefetch />
               <DragAutoScroll />
               {children}
+              <Player />
             </PlayerProvider>
           </UrlCacheProvider>
         </ConvexClientProvider>

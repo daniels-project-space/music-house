@@ -2,16 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { usePlayer } from "./player-context";
 
 export function Player() {
   const { current, next, prev } = usePlayer();
+  const pathname = usePathname() ?? "";
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const [pos, setPos] = useState(0);
   const [dur, setDur] = useState(0);
   const [vol, setVol] = useState(0.85);
   const [shuffle, setShuffle] = useState(false);
+  const isPublicRoute = pathname.startsWith("/share");
 
   useEffect(() => {
     if (!audioRef.current || !current) return;
@@ -66,7 +69,7 @@ export function Player() {
   return (
     <>
       <audio ref={audioRef} onEnded={next} className="hidden" />
-      {current && (
+      {current && !isPublicRoute && (
         <div
           className="fixed bottom-0 left-0 lg:left-[220px] right-0 z-40 backdrop-blur-2xl"
           style={{
