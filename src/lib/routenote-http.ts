@@ -304,39 +304,68 @@ export async function distributeRouteNoteHttp(
     detail: `status=${albumRes.status}; errors=${findFormErrors(albumRes.body).join(" | ").slice(0, 200) || "-"}`,
   });
 
-  // STEP 4: audio upload
+  // STEP 4: audio upload — three-stage protocol cracked 2026-05-09:
+  //   stage 1: POST file to addaudiomp3/form/<UPC> with field edit-Origin1 (raw upload)
+  //   stage 2: POST file to /rn/cloud_upload/<TOKEN>/?track_id=edit-Origin1&title=<URL> with field "file" (finalize/process)
+  //   stage 3: POST urlencoded form save with tracknio1, op=Save and Continue (commits track row)
+  // Audio MUST be 320 kbps + 44.1 kHz + stereo for MP3, otherwise stage 2 errors out.
   try {
     log("audio:post");
     const audioUrl = `https://www.routenote.com/rn/addaudiomp3/form/${upc}`;
     const am = await curlGet(cookieHeader, audioUrl);
-    const audioFields: Record<string, string> = {
-      tracknio1: input.title,
-      form_id: scrapeHidden(am.body, "form_id") || "addaudio",
-      form_build_id: scrapeHidden(am.body, "form_build_id") || "",
-      form_token: scrapeHidden(am.body, "form_token") || "",
-      op: "Save",
-    };
-    const tersaAudio = scrapeHidden(am.body, "tersawsas");
-    if (tersaAudio !== null) audioFields.tersawsas = tersaAudio;
-    const audioRes = await curlMultipart(
+
+    // Scrape the per-user upload token from the form HTML.
+    const tokenMatch = am.body.match(/cloud_upload\/([a-f0-9]{32})\//);
+    const uploadToken = tokenMatch ? tokenMatch[1] : null;
+    if (!uploadToken) {
+      steps.push({ step: "audio", ok: false, detail: "no cloud_upload token in form HTML" });
+      throw new Error("no cloud_upload token");
+    }
+
+    // Stage 1
+    const stage1 = await curlMultipart(
       cookieHeader,
       audioUrl,
-      audioFields,
-      [
-        {
-          field: "files[audio]",
-          path: audioPath,
-          filename: input.audioFilename,
-          contentType: input.audioContentType,
-        },
-      ],
+      {},
+      [{ field: "edit-Origin1", path: audioPath, filename: input.audioFilename, contentType: input.audioContentType }],
       audioUrl,
     );
+
+    // Stage 2 — finalize (this is the call that returns success/error code from RouteNote's audio validator)
+    const titleUrl = encodeURIComponent(audioUrl);
+    const cloudUrl = `https://www.routenote.com/rn/cloud_upload/${uploadToken}/?track_id=edit-Origin1&title=${titleUrl}`;
+    const stage2 = await curlMultipart(
+      cookieHeader,
+      cloudUrl,
+      {},
+      [{ field: "file", path: audioPath, filename: input.audioFilename, contentType: input.audioContentType }],
+      audioUrl,
+    );
+    // stage2 body is plain text like "edit-Origin1,success" or "edit-Origin1,bitrate too low"
+    const stage2Status = (stage2.body || "").split(",")[1]?.trim() || "?";
+    if (!/success/i.test(stage2Status)) {
+      steps.push({ step: "audio", ok: false, detail: `stage2 rejected: ${stage2.body.slice(0, 120)}` });
+      throw new Error("audio rejected: " + stage2Status);
+    }
+
+    // Stage 3 — commit the form (creates the track row)
+    const am2 = await curlGet(cookieHeader, audioUrl);
+    const audioFields: Record<string, string> = {
+      tracknio1: input.title,
+      form_id: scrapeHidden(am2.body, "form_id") || "addmp3_form",
+      form_build_id: scrapeHidden(am2.body, "form_build_id") || "",
+      form_token: scrapeHidden(am2.body, "form_token") || "",
+      added: scrapeHidden(am2.body, "added") || "1",
+      op: "Save and Continue",
+    };
+    const tersaAudio = scrapeHidden(am2.body, "tersawsas");
+    if (tersaAudio !== null) audioFields.tersawsas = tersaAudio;
+    const audioRes = await curlPost(cookieHeader, audioUrl, audioFields, audioUrl);
     const audioOk = audioRes.status === 302 || /trackmetadata/i.test(audioRes.location || "");
     steps.push({
       step: "audio",
       ok: audioOk,
-      detail: `status=${audioRes.status}; loc=${audioRes.location ?? "-"}`,
+      detail: `stage1=${stage1.status} stage2=${stage2Status} commit=${audioRes.status} loc=${audioRes.location ?? "-"}`,
     });
   } catch (e) {
     steps.push({ step: "audio", ok: false, detail: (e as Error).message });
