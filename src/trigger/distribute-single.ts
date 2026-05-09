@@ -20,6 +20,7 @@ function humanizeSlug(slug: string): string {
 
 export type DistributeSingleInput = {
   jobId: Id<"distributionJobs">;
+  dryRun?: boolean;
 };
 
 export const distributeSingle = task({
@@ -184,6 +185,13 @@ export const distributeSingle = task({
       liveViewUrl: result.liveViewUrl,
     });
     logger.info("dist:single:draft_ready", { upc: result.upc });
+
+    // Dry-run: stop before the Playwright submit. Useful for verifying the curl pipeline
+    // and the audio/cover/forms all land correctly without actually pushing to review.
+    if (input.dryRun) {
+      logger.info("dist:single:dryRun stop — release ready for review on RouteNote, NOT submitted");
+      return { upc: result.upc, liveViewUrl: result.liveViewUrl, dryRun: true };
+    }
 
     // Final submit via Playwright
     logger.info("dist:single:submitting via Playwright");
