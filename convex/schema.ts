@@ -123,4 +123,14 @@ export default defineSchema({
     cookiesJson: v.string(),
     savedAt: v.number(),
   }).index("by_distributor", ["distributor"]),
+
+  savedLyrics: defineTable({
+    title: v.string(),
+    vibe: v.optional(v.string()),
+    theme: v.optional(v.string()),
+    topic: v.optional(v.string()),
+    genre: v.optional(v.string()),
+    lyrics: v.string(),
+    createdAt: v.number(),
+  }).index("by_created", ["createdAt"]),
 });

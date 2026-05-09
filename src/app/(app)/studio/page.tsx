@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import Link from "next/link";
+import { LyricsCreator } from "@/components/lyrics-creator";
 
 type Generator = "suno" | "mureka";
 
@@ -142,6 +143,7 @@ export default function StudioPage() {
                 className="w-full bg-paper/[0.04] border border-brd rounded-md p-3 text-[0.85rem] text-t1 min-h-24 outline-none focus:border-purple/50 transition-colors leading-relaxed"
               />
             </div>
+            <SavedLyricsPicker onPick={(t, l) => { if (t && !title.trim()) setTitle(t); setLyrics(l); }} />
             <FieldArea
               label="Lyrics (optional)"
               value={lyrics}
@@ -212,6 +214,10 @@ export default function StudioPage() {
             ))}
           </ul>
         </aside>
+      </div>
+
+      <div className="mt-5">
+        <LyricsCreator />
       </div>
 
       {/* Suno Albums sub-panel */}
@@ -333,5 +339,33 @@ function FieldArea({ label, value, onChange, placeholder }: { label: string; val
         className="w-full bg-paper/[0.04] border border-brd rounded-md p-2.5 text-[0.78rem] text-t1 min-h-24 font-mono outline-none focus:border-purple/50 transition-colors"
       />
     </label>
+  );
+}
+
+function SavedLyricsPicker({ onPick }: { onPick: (title: string, lyrics: string) => void }) {
+  const saved = useQuery(api.savedLyrics.list, {}) ?? [];
+  if (saved.length === 0) return null;
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint">Use saved lyrics</span>
+      <select
+        defaultValue=""
+        onChange={(e) => {
+          const id = e.target.value;
+          if (!id) return;
+          const item = saved.find((s) => s._id === id);
+          if (item) onPick(item.title, item.lyrics);
+          e.target.value = "";
+        }}
+        className="bg-paper/[0.04] border border-brd rounded-md px-2 py-1 text-paper text-[0.75rem] focus:outline-none focus:border-purple/50"
+      >
+        <option value="">— pick saved —</option>
+        {saved.map((s) => (
+          <option key={s._id} value={s._id}>
+            {s.title}{s.genre ? ` · ${s.genre}` : ""}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
