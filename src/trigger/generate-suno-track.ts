@@ -64,25 +64,15 @@ export const generateSunoTrack = task({
         ? `${artistSlug}/${albumSlug}/${trackSlug}`
         : `${artistSlug}/_singles/${trackSlug}`;
 
-      // HQ rule: queue Suno's lossless WAV export and wait for it. We do NOT save the MP3.
-      // Each Suno track has an `id` (audio_id) we pass to the wav-generate endpoint.
-      const audioId = (t as { id?: string }).id ?? "";
+      // HARD RULE: every Suno track is saved as lossless WAV. No MP3 fallback — if the
+      // WAV export fails, we fail the whole job rather than silently downgrade quality.
+      // Suno V5_5's WAV is 44.1 kHz / 16-bit stereo (Spotify/Apple Music streaming spec).
+      const audioId = t.id;
       if (!audioId) {
-        logger.warn("suno:no-audio-id; skipping WAV export, falling back to MP3", { title });
-        const audioKey = `${baseKey}.mp3`;
-        await downloadToR2(t.audioUrl, audioKey, "audio/mpeg");
-        let coverKey: string | undefined;
-        if (t.imageUrl) {
-          coverKey = `${baseKey}.jpg`;
-          await downloadToR2(t.imageUrl, coverKey, "image/jpeg");
-        }
-        const id = await cx.mutation(api.tracks.insert, {
-          artistSlug, albumSlug, title, duration: t.duration,
-          generator: "suno", audioKey, coverKey,
-          lyrics: input.lyrics ? parseLyrics(input.lyrics) : undefined,
-        });
-        created.push(id);
-        continue;
+        throw new Error(
+          `Suno track "${title}" has no audio id in response — can't queue WAV export. ` +
+          `Suno API response shape may have changed; check src/lib/suno.ts mapping.`,
+        );
       }
 
       logger.info("suno:requesting WAV export", { title, audioId });
@@ -91,7 +81,7 @@ export const generateSunoTrack = task({
 
       const audioKey = `${baseKey}.wav`;
       await downloadToR2(wavUrl, audioKey, "audio/wav");
-      logger.info("suno:WAV saved", { audioKey });
+      logger.info("suno:WAV saved (lossless 44.1kHz stereo)", { audioKey });
 
       let coverKey: string | undefined;
       if (t.imageUrl) {

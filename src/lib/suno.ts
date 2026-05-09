@@ -45,7 +45,8 @@ export async function generate(input: SunoGenerateInput): Promise<{ taskId: stri
 }
 
 export type SunoTrack = {
-  audioUrl: string;
+  id: string;                  // Suno's audio_id — required for WAV export
+  audioUrl: string;            // MP3 URL — used only as transient input to WAV export, never saved
   sourceAudioUrl?: string;
   imageUrl?: string;
   title?: string;
@@ -70,6 +71,8 @@ export async function getTask(taskId: string): Promise<SunoTaskState> {
     return {
       status: "success",
       tracks: sunoData.map((t: Record<string, unknown>) => ({
+        // Suno returns track id as `id`, sometimes also as `audioId` — accept both shapes
+        id: String(t.id ?? t.audioId ?? ""),
         audioUrl: String(t.audioUrl ?? t.sourceAudioUrl ?? ""),
         sourceAudioUrl: t.sourceAudioUrl ? String(t.sourceAudioUrl) : undefined,
         imageUrl: t.imageUrl ? String(t.imageUrl) : undefined,

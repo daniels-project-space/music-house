@@ -49,22 +49,17 @@ export const generateMurekaTrack = task({
         ? `${artistSlug}/${albumSlug}/${trackSlug}`
         : `${artistSlug}/_singles/${trackSlug}`;
 
-      // HQ rule: prefer FLAC. We do NOT save MP3 when FLAC is available.
-      // Mureka returns both `url` (MP3) and `flac_url` (lossless FLAC).
-      let audioKey: string;
-      let contentType: string;
-      if (c.flac_url) {
-        audioKey = `${baseKey}.flac`;
-        contentType = "audio/flac";
-        await downloadToR2(c.flac_url, audioKey, contentType);
-        logger.info("mureka:FLAC saved", { audioKey });
-      } else {
-        // FLAC not provided by API — fall back to MP3 (rare).
-        logger.warn("mureka:no flac_url; falling back to MP3", { title });
-        audioKey = `${baseKey}.mp3`;
-        contentType = "audio/mpeg";
-        await downloadToR2(c.url, audioKey, contentType);
+      // HARD RULE: every Mureka track is saved as lossless FLAC. If the API didn't return
+      // flac_url, we fail the whole job rather than silently saving a lossy MP3.
+      if (!c.flac_url) {
+        throw new Error(
+          `Mureka choice "${title}" has no flac_url — can't enforce HQ rule. ` +
+          `Check Mureka API response shape; their plan may have changed.`,
+        );
       }
+      const audioKey = `${baseKey}.flac`;
+      await downloadToR2(c.flac_url, audioKey, "audio/flac");
+      logger.info("mureka:FLAC saved (lossless)", { audioKey });
 
       const id = await cx.mutation(api.tracks.insert, {
         artistSlug,
