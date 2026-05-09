@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -130,10 +131,15 @@ export function AlbumEditModal({ open, onClose, albumId }: Props) {
 
   const coverUrl = album?.coverKey ? get(album.coverKey) : undefined;
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 z-50 grid place-items-center bg-black/70 backdrop-blur-sm animate-fi"
-      onClick={onClose}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
     >
       <div
         className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-lg border bg-elevated p-6 shadow-2xl"
