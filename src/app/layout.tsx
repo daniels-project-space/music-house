@@ -4,12 +4,11 @@ import { PlayerProvider } from "@/components/player-context";
 import { UrlCacheProvider } from "@/components/url-cache-provider";
 import { GlobalUrlPrefetch } from "@/components/global-url-prefetch";
 import { DragAutoScroll } from "@/components/drag-autoscroll";
-import { AppChrome } from "@/components/app-chrome";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Music House",
-  description: "AI music label — Suno V5.5 · Mureka V8 · Distrokid",
+  description: "AI music label",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -28,7 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <PlayerProvider>
               <GlobalUrlPrefetch />
               <DragAutoScroll />
-              <AppChrome>{children}</AppChrome>
+              {children}
             </PlayerProvider>
           </UrlCacheProvider>
         </ConvexClientProvider>
