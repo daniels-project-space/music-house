@@ -17,7 +17,9 @@ type TrackRowProps = {
   duration?: number;
   generator: "suno" | "mureka" | "import";
   audioKey: string;
+  /** Either pass a resolved coverUrl or a coverKey for auto-resolution */
   coverUrl?: string;
+  coverKey?: string;
   hearted: boolean;
   onShowLyrics?: () => void;
   queue?: PlayerTrack[];
@@ -36,6 +38,7 @@ export function TrackRow({
   generator,
   audioKey,
   coverUrl,
+  coverKey,
   hearted,
   onShowLyrics,
   queue,
@@ -111,10 +114,14 @@ export function TrackRow({
   const dur = duration ? `${mins}:${secs.toString().padStart(2, "0")}` : "—";
 
   const handlePlay = async () => {
-    const url = get(audioKey) ?? (await ensure([audioKey]))[audioKey];
-    if (!url) return;
+    const audioUrl = get(audioKey) ?? (await ensure([audioKey]))[audioKey];
+    if (!audioUrl) return;
+    let resolvedCover = coverUrl;
+    if (!resolvedCover && coverKey) {
+      resolvedCover = get(coverKey) ?? (await ensure([coverKey]))[coverKey];
+    }
     play(
-      { id: trackId, title, artist: artistSlug, album: albumSlug, audioUrl: url, coverUrl },
+      { id: trackId, title, artist: artistSlug, album: albumSlug, audioUrl, coverUrl: resolvedCover },
       queue,
     );
   };

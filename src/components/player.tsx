@@ -86,7 +86,7 @@ export function Player() {
               <div
                 className={
                   "absolute top-1 right-0 w-12 h-12 rounded-full vinyl z-0 " +
-                  (playing ? "animate-vinyl animate-vinyl-glow" : "")
+                  (playing ? "animate-vinyl-playing" : "")
                 }
               >
                 <div className="absolute inset-[42%] rounded-full bg-paper/80" />
