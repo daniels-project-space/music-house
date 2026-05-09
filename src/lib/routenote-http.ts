@@ -267,9 +267,11 @@ export async function distributeRouteNoteHttp(
   // STEP 2: POST create_album with release date
   log("create:post");
   const releaseDate = input.releaseDate ?? futureDateISO(21);
+  const tersawsasCreate = scrapeHidden(createMeta.html, "tersawsas") ?? "true";
   const cr = await postUrlencoded(jar, "https://www.routenote.com/rn/create_album", {
     edit_album_info_upc: "",
     edit_album_info_release: releaseDate,
+    tersawsas: tersawsasCreate,
     form_id: "create-album-form",
     form_build_id: createMeta.build,
     form_token: createMeta.token,
@@ -321,6 +323,8 @@ export async function distributeRouteNoteHttp(
     form_token: editMeta.token,
     album_save: "Save and Continue",
   };
+  const tersawsasEdit = scrapeHidden(editMeta.html, "tersawsas");
+  if (tersawsasEdit !== null) albumFields.tersawsas = tersawsasEdit;
   if (input.explicit) {
     albumFields.Yes2 = "1";
     delete albumFields.No3;
