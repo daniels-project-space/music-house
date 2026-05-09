@@ -114,7 +114,7 @@ export function TrackRow({
     setDistributePanelOpen(true);
     setDistributing(true);
     try {
-      const r = await fetch("/api/distribute", {
+      const r = await fetch("/api/distribute/single", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ trackId }),

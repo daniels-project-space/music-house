@@ -1,0 +1,23 @@
+import { tasks } from "@trigger.dev/sdk/v3";
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "../../../../../convex/_generated/api";
+import type { Id } from "../../../../../convex/_generated/dataModel";
+import type { distributeAlbum } from "../../../../trigger/distribute-album";
+
+export const runtime = "nodejs";
+
+export async function POST(req: Request) {
+  const body = (await req.json()) as { albumId?: string };
+  if (!body.albumId) return Response.json({ error: "albumId required" }, { status: 400 });
+  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
+  if (!url) return Response.json({ error: "NEXT_PUBLIC_CONVEX_URL not set" }, { status: 500 });
+
+  const cx = new ConvexHttpClient(url);
+  try {
+    const jobId = await cx.mutation(api.distribution.createAlbum, { albumId: body.albumId as Id<"albums"> });
+    const handle = await tasks.trigger<typeof distributeAlbum>("distribute-album", { jobId });
+    return Response.json({ jobId, runId: handle.id, releaseType: "album" });
+  } catch (e) {
+    return Response.json({ error: (e as Error).message }, { status: 400 });
+  }
+}

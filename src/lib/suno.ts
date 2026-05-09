@@ -100,3 +100,58 @@ export async function pollUntilComplete(
   }
   throw new Error("Suno timed out");
 }
+
+// =====================================================================
+// HQ rule: every Suno track MUST be exported in lossless WAV before storage.
+// MP3 is never saved. Even though Suno V5 returns MP3 on the standard endpoint,
+// we always queue a WAV export and wait for it before the track is considered ready.
+// =====================================================================
+
+export async function requestWav(
+  payload: { taskId: string; audioId: string },
+): Promise<{ wavTaskId: string }> {
+  const body: Record<string, unknown> = {
+    taskId: payload.taskId,
+    audioId: payload.audioId,
+    callBackUrl: process.env.SUNO_CALLBACK_URL || "https://music-house-nine.vercel.app/api/suno-callback",
+  };
+  const r = await authedFetch("/wav/generate", { method: "POST", body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`Suno wav/generate ${r.status}: ${await r.text()}`);
+  const j = await r.json();
+  const wavTaskId = j?.data?.taskId ?? j?.taskId;
+  if (!wavTaskId) throw new Error(`Suno: no wav taskId in ${JSON.stringify(j).slice(0, 300)}`);
+  return { wavTaskId };
+}
+
+export async function getWav(wavTaskId: string): Promise<{ status: "pending" | "success" | "failed"; wavUrl?: string; error?: string }> {
+  const r = await authedFetch(`/wav/record-info?taskId=${encodeURIComponent(wavTaskId)}`);
+  if (!r.ok) throw new Error(`Suno wav poll ${r.status}`);
+  const j = await r.json();
+  const data = j?.data ?? {};
+  const status = String(data.status ?? "").toUpperCase();
+  if (status === "SUCCESS") {
+    const wavUrl = data?.response?.audio_wav_url ?? data?.audio_wav_url ?? data?.response?.wav_url ?? data?.wav_url;
+    if (!wavUrl) return { status: "pending" };
+    return { status: "success", wavUrl: String(wavUrl) };
+  }
+  if (status.includes("FAIL") || status === "ERROR") {
+    return { status: "failed", error: data.errorMessage ?? status };
+  }
+  return { status: "pending" };
+}
+
+export async function pollWavUntilReady(
+  wavTaskId: string,
+  opts: { intervalMs?: number; timeoutMs?: number } = {},
+): Promise<string> {
+  const interval = opts.intervalMs ?? 6000;
+  const timeout = opts.timeoutMs ?? 10 * 60 * 1000;
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    const s = await getWav(wavTaskId);
+    if (s.status === "success" && s.wavUrl) return s.wavUrl;
+    if (s.status === "failed") throw new Error(`Suno WAV failed: ${s.error}`);
+    await new Promise((r) => setTimeout(r, interval));
+  }
+  throw new Error("Suno WAV export timed out");
+}

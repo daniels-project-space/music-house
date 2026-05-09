@@ -1,9 +1,7 @@
 import { defineConfig } from "@trigger.dev/sdk/v3";
 import { playwright } from "@trigger.dev/build/extensions/playwright";
+import { ffmpeg, additionalPackages } from "@trigger.dev/build/extensions/core";
 
-// Trigger.dev project for Music House. Provision separately via:
-//   npm run trigger:dev   (one-time login, creates project)
-// Then add the resulting project ref here and to the vault under service:trigger, scopes:["music-house"].
 export default defineConfig({
   project: process.env.TRIGGER_PROJECT_REF ?? "",
   runtime: "node",
@@ -16,6 +14,10 @@ export default defineConfig({
   dirs: ["./src/trigger"],
   build: {
     external: ["playwright-core", "playwright"],
-    extensions: [playwright({ browsers: ["chromium"], headless: true })],
+    extensions: [
+      playwright({ browsers: ["chromium"], headless: true }),
+      ffmpeg(),
+      additionalPackages({ packages: ["curl"] }),
+    ],
   },
 });

@@ -42,63 +42,78 @@ export const generateSunoTrack = task({
     const cx = convexClient();
     logger.info("suno:start", { jobId: input.jobId });
 
-    try {
-      const { taskId } = await suno.generate({
-        prompt: input.prompt,
-        lyrics: input.lyrics,
-        title: input.title ?? "Untitled",
-        callbackUrl: input.callbackUrl,
-      });
-      await cx.mutation(api.jobs.setRunning, { id: input.jobId, triggerRunId: `suno:${taskId}` });
+    const { taskId } = await suno.generate({
+      prompt: input.prompt,
+      lyrics: input.lyrics,
+      title: input.title ?? "Untitled",
+      callbackUrl: input.callbackUrl,
+    });
+    await cx.mutation(api.jobs.setRunning, { id: input.jobId, triggerRunId: `suno:${taskId}` });
 
-      const tracks = await suno.pollUntilComplete(taskId, { intervalMs: 6000, timeoutMs: 8 * 60 * 1000 });
+    const tracks = await suno.pollUntilComplete(taskId, { intervalMs: 6000, timeoutMs: 8 * 60 * 1000 });
 
-      const created: Id<"tracks">[] = [];
-      let i = 0;
-      for (const t of tracks) {
-        i++;
-        const title = t.title ?? input.title ?? "Untitled";
-        const trackSlug = `${slug(title)}-${Date.now().toString(36)}${i}`;
-        const artistSlug = input.artistSlug ?? "_unsorted";
-        const albumSlug = input.albumSlug;
-        const baseKey = albumSlug
-          ? `${artistSlug}/${albumSlug}/${trackSlug}`
-          : `${artistSlug}/_singles/${trackSlug}`;
+    const created: Id<"tracks">[] = [];
+    let i = 0;
+    for (const t of tracks) {
+      i++;
+      const title = t.title ?? input.title ?? "Untitled";
+      const trackSlug = `${slug(title)}-${Date.now().toString(36)}${i}`;
+      const artistSlug = input.artistSlug ?? "_unsorted";
+      const albumSlug = input.albumSlug;
+      const baseKey = albumSlug
+        ? `${artistSlug}/${albumSlug}/${trackSlug}`
+        : `${artistSlug}/_singles/${trackSlug}`;
 
+      // HQ rule: queue Suno's lossless WAV export and wait for it. We do NOT save the MP3.
+      // Each Suno track has an `id` (audio_id) we pass to the wav-generate endpoint.
+      const audioId = (t as { id?: string }).id ?? "";
+      if (!audioId) {
+        logger.warn("suno:no-audio-id; skipping WAV export, falling back to MP3", { title });
         const audioKey = `${baseKey}.mp3`;
         await downloadToR2(t.audioUrl, audioKey, "audio/mpeg");
-
         let coverKey: string | undefined;
         if (t.imageUrl) {
           coverKey = `${baseKey}.jpg`;
           await downloadToR2(t.imageUrl, coverKey, "image/jpeg");
         }
-
         const id = await cx.mutation(api.tracks.insert, {
-          artistSlug,
-          albumSlug,
-          title,
-          duration: t.duration,
-          generator: "suno",
-          audioKey,
-          coverKey,
+          artistSlug, albumSlug, title, duration: t.duration,
+          generator: "suno", audioKey, coverKey,
           lyrics: input.lyrics ? parseLyrics(input.lyrics) : undefined,
         });
         created.push(id);
+        continue;
       }
 
-      await cx.mutation(api.jobs.setComplete, { id: input.jobId, resultTrackIds: created });
-      logger.info("suno:done", { count: created.length });
-      return { trackIds: created };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      logger.error("suno:fail", { jobId: input.jobId, error: msg });
-      try {
-        await cx.mutation(api.jobs.setFailed, { id: input.jobId, error: msg });
-      } catch (mutErr) {
-        logger.error("suno:setFailed-failed", { jobId: input.jobId, error: String(mutErr) });
+      logger.info("suno:requesting WAV export", { title, audioId });
+      const { wavTaskId } = await suno.requestWav({ taskId, audioId });
+      const wavUrl = await suno.pollWavUntilReady(wavTaskId, { intervalMs: 8000, timeoutMs: 12 * 60 * 1000 });
+
+      const audioKey = `${baseKey}.wav`;
+      await downloadToR2(wavUrl, audioKey, "audio/wav");
+      logger.info("suno:WAV saved", { audioKey });
+
+      let coverKey: string | undefined;
+      if (t.imageUrl) {
+        coverKey = `${baseKey}.jpg`;
+        await downloadToR2(t.imageUrl, coverKey, "image/jpeg");
       }
-      throw err;
+
+      const id = await cx.mutation(api.tracks.insert, {
+        artistSlug,
+        albumSlug,
+        title,
+        duration: t.duration,
+        generator: "suno",
+        audioKey,
+        coverKey,
+        lyrics: input.lyrics ? parseLyrics(input.lyrics) : undefined,
+      });
+      created.push(id);
     }
+
+    await cx.mutation(api.jobs.setComplete, { id: input.jobId, resultTrackIds: created });
+    logger.info("suno:done", { count: created.length });
+    return { trackIds: created };
   },
 });

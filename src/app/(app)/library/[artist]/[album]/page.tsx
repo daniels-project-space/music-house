@@ -90,9 +90,21 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
   const isComplete = !!(albumRow as { completedAt?: number }).completedAt;
 
   const distributeAll = async () => {
-    if (!confirm(`Distribute ${sorted.length} track${sorted.length === 1 ? "" : "s"} from this album?`)) return;
-    for (const t of sorted) {
-      try { await setDistributed({ id: t._id, distributed: true }); } catch {}
+    if (!confirm(`Submit album "${albumRow.name}" (${sorted.length} track${sorted.length === 1 ? "" : "s"}) to RouteNote for review?`)) return;
+    try {
+      const r = await fetch("/api/distribute/album", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ albumId: albumRow._id }),
+      });
+      const j = await r.json();
+      if (!r.ok) {
+        alert(`Distribute album failed to start: ${j.error || r.status}`);
+        return;
+      }
+      alert(`Album distribution started — Trigger run ${j.runId}. Watch /api/distribute/status?jobId=${j.jobId} for progress.`);
+    } catch (e) {
+      alert(`Distribute album failed: ${(e as Error).message}`);
     }
   };
   const toggleComplete = async () => {

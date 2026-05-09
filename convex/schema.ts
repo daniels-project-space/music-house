@@ -98,11 +98,14 @@ export default defineSchema({
 
   distributionJobs: defineTable({
     trackId: v.id("tracks"),
+    albumId: v.optional(v.id("albums")),
+    releaseType: v.optional(v.union(v.literal("single"), v.literal("album"))),
     distributor: v.literal("routenote"),
     status: v.union(
       v.literal("pending"),
       v.literal("running"),
       v.literal("draft_ready"),
+      v.literal("submitted"),
       v.literal("complete"),
       v.literal("failed"),
     ),
@@ -110,11 +113,13 @@ export default defineSchema({
     browserbaseSessionId: v.optional(v.string()),
     liveViewUrl: v.optional(v.string()),
     releaseUrl: v.optional(v.string()),
+    upc: v.optional(v.string()),
     error: v.optional(v.string()),
     createdAt: v.number(),
     completedAt: v.optional(v.number()),
   })
     .index("by_track", ["trackId"])
+    .index("by_album", ["albumId"])
     .index("by_status", ["status"])
     .index("by_trigger_run", ["triggerRunId"]),
 
