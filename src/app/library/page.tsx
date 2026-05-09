@@ -46,11 +46,9 @@ function LibraryInner() {
 
   type AlbumDoc = (typeof albums)[number];
   const bySection: Record<string, AlbumDoc[]> = {};
-  const sunoStaging: AlbumDoc[] = [];
   const otherUnsorted: AlbumDoc[] = [];
   for (const a of albums) {
     if (artistFilter && a.artistSlug !== artistFilter) continue;
-    if (a.artistSlug === "_suno") { sunoStaging.push(a); continue; }
     const sec = (a as { section?: string }).section;
     if (sec && SECTIONS.some((s) => s.key === sec)) {
       (bySection[sec] ??= []).push(a);
@@ -135,12 +133,6 @@ function LibraryInner() {
             </Section>
           );
         })}
-
-        {sunoStaging.length > 0 && (
-          <Section label="Suno Staging" icon="◐" accent="#ec4899" rule="rgba(236,72,153,0.25)" count={sunoStaging.length}>
-            <Grid albums={sunoStaging} tracksByAlbum={tracksByAlbum} />
-          </Section>
-        )}
 
         {otherUnsorted.length > 0 && (
           <Section label="Other" icon="◯" accent="#94a3b8" rule="rgba(148,163,184,0.2)" count={otherUnsorted.length}>
