@@ -69,7 +69,7 @@ function LibraryInner() {
   }
 
   const unsortedTracks = useMemo(() => {
-    let list = tracks.filter((t) => !t.albumSlug || t.albumSlug === "_singles" || t.albumSlug === "_unsorted");
+    let list = tracks.filter((t) => !t.archivedAt && (!t.albumSlug || t.albumSlug === "_singles" || t.albumSlug === "_unsorted"));
     if (artistFilter) list = list.filter((t) => t.artistSlug === artistFilter);
     if (genreFilter) list = list.filter((t) => t.genre === genreFilter);
     if (heartedOnly) list = list.filter((t) => hearted.has(t._id));

@@ -61,7 +61,9 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
     );
   }
 
-  const sorted = [...tracks].sort((a, b) => (a.trackNum ?? 0) - (b.trackNum ?? 0));
+  const sorted = [...tracks]
+    .filter((t) => !(t as { archivedAt?: number }).archivedAt)
+    .sort((a, b) => (a.trackNum ?? 0) - (b.trackNum ?? 0));
   const queue: PlayerTrack[] = sorted
     .map((t) => ({
       id: t._id,
