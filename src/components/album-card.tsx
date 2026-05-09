@@ -152,15 +152,20 @@ export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, s
           {trackCount} trk
         </span>
         {albumId && (
-          <div ref={menuRef} className="absolute top-1.5 right-1.5">
+          <div
+            ref={menuRef}
+            className="absolute top-1.5 right-1.5"
+            draggable={false}
+            onDragStart={(e) => e.preventDefault()}
+          >
             <button
               type="button"
+              draggable={false}
               onClick={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
                 setMenuOpen((v) => !v);
               }}
-              onMouseDown={(e) => e.stopPropagation()}
               className={"w-6 h-6 rounded-full grid place-items-center transition-all text-paper hover:scale-110 " + (menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100")}
               style={{ background: "rgba(5,6,8,0.85)", border: "1px solid rgba(255,255,255,0.12)", backdropFilter: "blur(8px)" }}
               aria-label={`Album menu for ${name}`}
@@ -172,8 +177,8 @@ export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, s
               <div
                 className="absolute right-0 top-7 z-30 w-36 rounded-md border bg-elevated shadow-2xl py-1 animate-fi"
                 style={{ borderColor: "var(--color-brd)" }}
+                draggable={false}
                 onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
-                onMouseDown={(e) => e.stopPropagation()}
               >
                 <button
                   type="button"
