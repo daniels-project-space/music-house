@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import { ConvexClientProvider } from "@/components/convex-provider";
-import { Player } from "@/components/player";
 import { PlayerProvider } from "@/components/player-context";
-import { Sidebar } from "@/components/sidebar";
 import { UrlCacheProvider } from "@/components/url-cache-provider";
 import { GlobalUrlPrefetch } from "@/components/global-url-prefetch";
 import { DragAutoScroll } from "@/components/drag-autoscroll";
+import { AppChrome } from "@/components/app-chrome";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -29,13 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <PlayerProvider>
               <GlobalUrlPrefetch />
               <DragAutoScroll />
-              <div className="flex min-h-screen">
-                <Sidebar />
-                <div className="flex-1 min-w-0 flex flex-col">
-                  {children}
-                </div>
-              </div>
-              <Player />
+              <AppChrome>{children}</AppChrome>
             </PlayerProvider>
           </UrlCacheProvider>
         </ConvexClientProvider>

@@ -1,10 +1,6 @@
-"use client";
-import { useEffect } from "react";
-
+// Share routes use a clean public layout. The root layout's AppChrome
+// detects /share paths and skips Sidebar/Player rendering, so this layout
+// just passes children through.
 export default function ShareLayout({ children }: { children: React.ReactNode }) {
-  useEffect(() => {
-    document.body.classList.add("share-mode");
-    return () => document.body.classList.remove("share-mode");
-  }, []);
   return <>{children}</>;
 }
