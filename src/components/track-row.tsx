@@ -6,6 +6,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { usePlayer, type PlayerTrack } from "./player-context";
 import { useUrlCache } from "./url-cache-provider";
+import { MoveToModal } from "./move-to-modal";
 
 type TrackRowProps = {
   trackId: Id<"tracks">;
@@ -55,15 +56,11 @@ export function TrackRow({
   const { play, current } = usePlayer();
   const { ensure, get } = useUrlCache();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [moveSubmenu, setMoveSubmenu] = useState(false);
+  const [moveModalOpen, setMoveModalOpen] = useState(false);
   const [dragOver, setDragOver] = useState<"above" | "below" | null>(null);
   const [distributing, setDistributing] = useState(false);
   const [distributePanelOpen, setDistributePanelOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const albumsForArtist = useQuery(
-    api.albums.list,
-    menuOpen && moveSubmenu ? { artistSlug } : "skip",
-  );
   const distributionJob = useQuery(
     api.distribution.byTrack,
     distributePanelOpen ? { trackId } : "skip",
@@ -79,18 +76,11 @@ export function TrackRow({
     const close = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
-        setMoveSubmenu(false);
       }
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [menuOpen]);
-
-  const doMove = async (targetAlbumSlug: string | undefined) => {
-    await move({ id: trackId, targetArtistSlug: artistSlug, targetAlbumSlug });
-    setMenuOpen(false);
-    setMoveSubmenu(false);
-  };
 
   const startDistribute = async () => {
     setMenuOpen(false);
@@ -246,55 +236,21 @@ export function TrackRow({
             className="absolute right-0 top-9 z-30 w-44 rounded-md border bg-elevated shadow-2xl py-1 animate-fi"
             style={{ borderColor: "var(--color-brd)" }}
           >
-            {moveSubmenu ? (
-              <>
-                <Item icon="←" label="Back" onClick={() => setMoveSubmenu(false)} />
-                <div className="my-1 mx-2 h-px bg-brd" />
-                <div className="max-h-64 overflow-y-auto">
-                  {albumSlug ? (
-                    <Item icon="∅" label="Unsorted" onClick={() => doMove(undefined)} />
-                  ) : null}
-                  {albumsForArtist === undefined ? (
-                    <div className="px-3 py-1.5 text-[0.65rem] text-t4 font-mono">Loading…</div>
-                  ) : (
-                    (() => {
-                      const others = albumsForArtist.filter((a) => a.slug !== albumSlug);
-                      if (others.length === 0 && !albumSlug) {
-                        return (
-                          <div className="px-3 py-1.5 text-[0.65rem] text-t4 font-mono">No albums</div>
-                        );
-                      }
-                      return others.map((a) => (
-                        <Item
-                          key={a._id}
-                          icon="♫"
-                          label={a.name}
-                          onClick={() => doMove(a.slug)}
-                        />
-                      ));
-                    })()
-                  )}
-                </div>
-              </>
-            ) : (
-              <>
-                <Item icon="✎" label="Rename" onClick={() => { setMenuOpen(false); setEditing(true); }} />
-                <Item icon="♪" label="Lyrics" onClick={() => { setMenuOpen(false); onShowLyrics?.(); }} />
-                <Item icon="→" label="Move to…" onClick={() => setMoveSubmenu(true)} />
-                <Item icon="📡" label="Distribute" onClick={startDistribute} />
-                <Item icon="✓" label="Mark distributed" onClick={() => { setDistributed({ id: trackId, distributed: true }); setMenuOpen(false); }} />
-                <div className="my-1 mx-2 h-px bg-brd" />
-                <Item
-                  icon="🗑"
-                  label="Delete"
-                  danger
-                  onClick={() => {
-                    archive({ id: trackId });
-                    setMenuOpen(false);
-                  }}
-                />
-              </>
-            )}
+            <Item icon="✎" label="Rename" onClick={() => { setMenuOpen(false); setEditing(true); }} />
+            <Item icon="♪" label="Lyrics" onClick={() => { setMenuOpen(false); onShowLyrics?.(); }} />
+            <Item icon="→" label="Move to…" onClick={() => { setMenuOpen(false); setMoveModalOpen(true); }} />
+            <Item icon="📡" label="Distribute" onClick={startDistribute} />
+            <Item icon="✓" label="Mark distributed" onClick={() => { setDistributed({ id: trackId, distributed: true }); setMenuOpen(false); }} />
+            <div className="my-1 mx-2 h-px bg-brd" />
+            <Item
+              icon="🗑"
+              label="Delete"
+              danger
+              onClick={() => {
+                archive({ id: trackId });
+                setMenuOpen(false);
+              }}
+            />
           </div>
         )}
       </div>
@@ -353,6 +309,13 @@ export function TrackRow({
           </div>
         </div>
       )}
+      <MoveToModal
+        open={moveModalOpen}
+        onClose={() => setMoveModalOpen(false)}
+        trackId={trackId}
+        artistSlug={artistSlug}
+        currentAlbumSlug={albumSlug}
+      />
     </div>
   );
 }

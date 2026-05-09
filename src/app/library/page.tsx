@@ -8,6 +8,7 @@ import { AlbumCard } from "@/components/album-card";
 import { useResolvedUrls } from "@/components/url-cache-provider";
 import { TrackRow, useHeartedSet } from "@/components/track-row";
 import type { PlayerTrack } from "@/components/player-context";
+import { MoveToModal } from "@/components/move-to-modal";
 
 const SECTIONS: Array<{ key: string; label: string; icon: string; accent: string; rule: string }> = [
   { key: "film_cinematic", label: "Film & Cinematic", icon: "🎬", accent: "#ef4444", rule: "rgba(239,68,68,0.25)" },
@@ -213,25 +214,46 @@ function Section({
   );
 }
 
-function Grid({ albums, tracksByAlbum }: { albums: { _id: string; artistSlug: string; slug: string; name: string; coverKey?: string; section?: string }[]; tracksByAlbum: Map<string, number>; }) {
+function Grid({ albums, tracksByAlbum, defaultArtistSlug }: { albums: { _id: string; artistSlug: string; slug: string; name: string; coverKey?: string; section?: string }[]; tracksByAlbum: Map<string, number>; defaultArtistSlug?: string }) {
+  const [newAlbumOpen, setNewAlbumOpen] = useState(false);
+  const fallbackArtist = defaultArtistSlug || albums[0]?.artistSlug || "_unsorted";
   return (
-    <div
-      className="grid"
-      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "2rem 1.75rem" }}
-    >
-      {albums.map((a) => (
-        <AlbumCard
-          key={a._id}
-          albumId={a._id as never}
-          artist={a.artistSlug}
-          slug={a.slug}
-          name={a.name}
-          trackCount={tracksByAlbum.get(`${a.artistSlug}/${a.slug}`) ?? 0}
-          coverKey={a.coverKey}
-          section={a.section}
-        />
-      ))}
-    </div>
+    <>
+      <div
+        className="grid"
+        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "2rem 1.75rem" }}
+      >
+        {albums.map((a) => (
+          <AlbumCard
+            key={a._id}
+            albumId={a._id as never}
+            artist={a.artistSlug}
+            slug={a.slug}
+            name={a.name}
+            trackCount={tracksByAlbum.get(`${a.artistSlug}/${a.slug}`) ?? 0}
+            coverKey={a.coverKey}
+            section={a.section}
+          />
+        ))}
+        <button
+          onClick={() => setNewAlbumOpen(true)}
+          className="aspect-square rounded-md border-2 border-dashed flex flex-col items-center justify-center transition-colors hover:bg-purple/[0.06] focus:outline-none focus:ring-2 focus:ring-purple/40"
+          style={{ borderColor: "rgba(139,92,246,0.4)" }}
+          title={`Create new album under ${fallbackArtist}`}
+        >
+          <span className="text-4xl text-purple mb-1.5 leading-none">+</span>
+          <span className="font-display text-[0.8rem] font-medium text-purple">New Album</span>
+          <span className="font-mono text-[0.55rem] uppercase tracking-[0.14em] text-paper-faint mt-1">
+            flux cover
+          </span>
+        </button>
+      </div>
+      <MoveToModal
+        open={newAlbumOpen}
+        onClose={() => setNewAlbumOpen(false)}
+        artistSlug={fallbackArtist}
+      />
+    </>
   );
 }
 

@@ -47,6 +47,21 @@ export default function DistributionPage() {
 
   return (
     <main className="px-5 sm:px-6 lg:px-8 pt-3 pb-32 animate-fi">
+      <div className="flex items-baseline justify-between gap-3 mb-4 pb-3" style={{ borderBottom: "1px solid var(--color-brd)" }}>
+        <div className="flex items-baseline gap-3">
+          <h1 className="font-display text-[1.05rem] font-bold tracking-tight text-paper">Distribution</h1>
+          <span className="font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint">via RouteNote</span>
+        </div>
+        <a
+          href="https://www.routenote.com/rn/releases"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-mono text-[0.62rem] uppercase tracking-[0.16em] px-3 py-1.5 rounded border text-cyan hover:bg-cyan/[0.06] transition-colors"
+          style={{ borderColor: "rgba(6,182,212,0.4)" }}
+        >
+          Open RouteNote ↗
+        </a>
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <Column color="#34d399" label="Ready">
           {ready.length === 0 ? (
