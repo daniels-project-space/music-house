@@ -28,6 +28,9 @@ function LibraryInner() {
   const [artistFilter, setArtistFilter] = useState("");
   const [heartedOnly, setHeartedOnly] = useState(false);
   const [newAlbumOpen, setNewAlbumOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const searchNorm = search.trim().toLowerCase();
 
   const genres = useMemo(() => {
     const set = new Set<string>();
@@ -49,6 +52,14 @@ function LibraryInner() {
   const otherUnsorted: AlbumDoc[] = [];
   for (const a of albums) {
     if (artistFilter && a.artistSlug !== artistFilter) continue;
+    if (
+      searchNorm &&
+      !a.name.toLowerCase().includes(searchNorm) &&
+      !a.artistSlug.toLowerCase().includes(searchNorm) &&
+      !a.slug.toLowerCase().includes(searchNorm)
+    ) {
+      continue;
+    }
     const sec = (a as { section?: string }).section;
     if (sec && SECTIONS.some((s) => s.key === sec)) {
       (bySection[sec] ??= []).push(a);
@@ -72,6 +83,26 @@ function LibraryInner() {
     <main className="px-5 sm:px-6 lg:px-8 pt-3 pb-32 animate-fi">
       {/* Filter bar — legacy .fb */}
       <div className="flex items-center gap-2 flex-wrap mb-5">
+        <div className="relative">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search albums…"
+            className="bg-paper/[0.04] border border-brd rounded-md pl-7 pr-7 py-1.5 text-[0.78rem] text-paper outline-none focus:border-purple/50 transition-colors w-56"
+          />
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-paper-faint text-[0.7rem]">⌕</span>
+          {search ? (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-paper-faint hover:text-paper text-[0.7rem]"
+              aria-label="Clear search"
+            >
+              ✕
+            </button>
+          ) : null}
+        </div>
         <select
           className="fselect"
           value={genreFilter}
