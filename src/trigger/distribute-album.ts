@@ -19,6 +19,7 @@ function humanizeSlug(slug: string): string {
 
 export type DistributeAlbumInput = {
   jobId: Id<"distributionJobs">;
+  dryRun?: boolean;
 };
 
 export const distributeAlbum = task({
@@ -142,6 +143,14 @@ export const distributeAlbum = task({
       id: input.jobId,
       liveViewUrl: result.liveViewUrl,
     });
+
+    if (input.dryRun) {
+      logger.info("dist:album:dryRun stop — release ready for review on RouteNote, NOT submitted", {
+        upc: result.upc,
+        trackCount: tracks.length,
+      });
+      return { upc: result.upc, liveViewUrl: result.liveViewUrl, trackCount: tracks.length, dryRun: true };
+    }
 
     logger.info("dist:album:submitting via Playwright");
     const submit = await submitDistributeFreePlaywright(result.upc, cookies);
