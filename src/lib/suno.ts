@@ -34,7 +34,7 @@ export async function generate(input: SunoGenerateInput): Promise<{ taskId: stri
     title: input.title ?? "Untitled",
   };
   if (input.lyrics) body.prompt = input.lyrics;
-  if (input.callbackUrl) body.callBackUrl = input.callbackUrl;
+  body.callBackUrl = input.callbackUrl || process.env.SUNO_CALLBACK_URL || "https://music-house-nine.vercel.app/api/suno-callback";
 
   const r = await authedFetch("/generate", { method: "POST", body: JSON.stringify(body) });
   if (!r.ok) throw new Error(`Suno generate ${r.status}: ${await r.text()}`);
