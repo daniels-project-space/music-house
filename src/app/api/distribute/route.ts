@@ -1,11 +1,12 @@
-import { tasks } from "@trigger.dev/sdk/v3";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import type { distributeTrack } from "../../../trigger/distribute-track";
 
 export const runtime = "nodejs";
 
+// Distribution is processed by the VPS worker (distribute-worker.mjs) which
+// polls Convex for pending jobs. This route just inserts the job — no Trigger
+// task is invoked.
 export async function POST(req: Request) {
   const body = (await req.json()) as { trackId?: string };
   if (!body.trackId) {
@@ -21,7 +22,5 @@ export async function POST(req: Request) {
   const trackId = body.trackId as Id<"tracks">;
   const jobId = await cx.mutation(api.distribution.create, { trackId });
 
-  const handle = await tasks.trigger<typeof distributeTrack>("distribute-track", { jobId });
-
-  return Response.json({ jobId, runId: handle.id });
+  return Response.json({ jobId });
 }
