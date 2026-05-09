@@ -1,7 +1,16 @@
 import "server-only";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { writeFile, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-// Pure HTTP client for RouteNote's Drupal forms — no browser, no Playwright.
-// Replicates: create release, edit album, upload audio, upload artwork, manage stores.
+// Pure HTTP RouteNote client. Uses `curl` subprocess (not Node fetch) because
+// RouteNote's WAF rejects Node fetch — tripped TLS/HTTP version check.
+// See memory/reference_routenote_http_methodology.md for the field-by-field
+// gotchas this implementation works around.
+
+const execP = promisify(execFile);
 
 export type CookieEntry = {
   name: string;
@@ -32,7 +41,6 @@ export type DistributeStepResult = {
   step: string;
   ok: boolean;
   detail?: string;
-  url?: string;
 };
 
 export type DistributeResult = {
@@ -40,94 +48,81 @@ export type DistributeResult = {
   upc?: string;
   steps: DistributeStepResult[];
   cookies: CookieEntry[];
+  liveViewUrl?: string;
 };
 
 const UA =
-  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 const ROUTENOTE_HOSTS = ["www.routenote.com", "routenote.com", ".routenote.com"];
 
-function cookiesToHeader(jar: CookieEntry[]): string {
-  return jar
-    .filter((c) => ROUTENOTE_HOSTS.some((h) => c.domain === h || c.domain.endsWith(h)))
-    .map((c) => `${c.name}=${c.value}`)
-    .join("; ");
+function buildCookieHeader(jar: CookieEntry[]): string {
+  const filtered = jar.filter((c) =>
+    ROUTENOTE_HOSTS.some((h) => c.domain === h || c.domain.endsWith(h)),
+  );
+  // Last-write-wins by name (browsers only send the most recent cookie per name).
+  const seen = new Map<string, CookieEntry>();
+  for (const c of filtered) seen.set(c.name, c);
+  return [...seen.values()].map((c) => `${c.name}=${c.value}`).join("; ");
 }
 
-function parseSetCookie(line: string): CookieEntry | null {
-  const parts = line.split(/;\s*/);
-  if (!parts.length) return null;
-  const [first, ...attrs] = parts;
-  const eq = first.indexOf("=");
-  if (eq < 0) return null;
-  const name = first.slice(0, eq).trim();
-  const value = first.slice(eq + 1).trim();
-  const ent: CookieEntry = { name, value, domain: "www.routenote.com", path: "/" };
-  for (const a of attrs) {
-    const [k, v] = a.split("=", 2).map((s) => (s ?? "").trim());
-    if (!k) continue;
-    const lk = k.toLowerCase();
-    if (lk === "domain") ent.domain = v ?? ent.domain;
-    else if (lk === "path") ent.path = v ?? "/";
-    else if (lk === "httponly") ent.httpOnly = true;
-    else if (lk === "secure") ent.secure = true;
-    else if (lk === "samesite") ent.sameSite = v ?? "Lax";
-    else if (lk === "expires" && v) {
-      const t = Date.parse(v);
-      if (!isNaN(t)) ent.expires = Math.floor(t / 1000);
-    }
-  }
-  return ent;
-}
+type CurlResp = { status: number; location: string | null; body: string; head: string };
 
-function mergeJar(jar: CookieEntry[], res: Response): CookieEntry[] {
-  // Node 18+ exposes getSetCookie; fall back to single value for older runtimes.
-  type WithGetSetCookie = Headers & { getSetCookie?: () => string[] };
-  const h = res.headers as WithGetSetCookie;
-  const lines = h.getSetCookie ? h.getSetCookie() : [];
-  if (lines.length === 0) {
-    const single = res.headers.get("set-cookie");
-    if (single) lines.push(single);
-  }
-  const next = [...jar];
-  for (const line of lines) {
-    const ent = parseSetCookie(line);
-    if (!ent) continue;
-    const idx = next.findIndex(
-      (c) => c.name === ent.name && c.domain === ent.domain && c.path === ent.path,
-    );
-    if (idx >= 0) next[idx] = ent;
-    else next.push(ent);
-  }
-  return next;
-}
-
-async function rnFetch(
-  url: string,
-  jar: CookieEntry[],
-  init: RequestInit = {},
-): Promise<{ res: Response; body: string; jar: CookieEntry[] }> {
-  const baseHeaders: Record<string, string> = {
-    "User-Agent": UA,
-    Accept:
-      "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-    Cookie: cookiesToHeader(jar),
+function parseCurl(raw: string): CurlResp {
+  const blocks = raw.split(/(?=^HTTP\/[12](?:\.\d)?\s)/m).filter((b) => /^HTTP\/[12]/.test(b));
+  const last = blocks[blocks.length - 1] || raw;
+  const sepIdx = last.indexOf("\r\n\r\n") >= 0 ? last.indexOf("\r\n\r\n") : last.indexOf("\n\n");
+  const sepLen = last.indexOf("\r\n\r\n") >= 0 ? 4 : 2;
+  const head = last.slice(0, sepIdx);
+  const body = last.slice(sepIdx + sepLen);
+  const m = head.match(/^HTTP\/[\d.]+\s+(\d+)/);
+  const locM = head.match(/^location:\s*(.+)$/im);
+  return {
+    status: m ? parseInt(m[1], 10) : 0,
+    location: locM ? locM[1].trim() : null,
+    body,
+    head,
   };
-  if (init.headers) Object.assign(baseHeaders, init.headers as Record<string, string>);
-  const res = await fetch(url, {
-    ...init,
-    redirect: "manual",
-    headers: baseHeaders,
-  });
-  const newJar = mergeJar(jar, res);
-  let body = "";
-  if (res.status >= 200 && res.status < 400 && (res.headers.get("content-type") || "").includes("text")) {
-    body = await res.text();
-  } else if (res.status >= 200 && res.status < 300) {
-    body = await res.text().catch(() => "");
+}
+
+async function curlGet(cookieHeader: string, url: string, referer?: string): Promise<CurlResp> {
+  const args = ["-sS", "-i", "-A", UA, url, "-H", `Cookie: ${cookieHeader}`];
+  if (referer) args.push("-e", referer);
+  const { stdout } = await execP("curl", args, { maxBuffer: 200 * 1024 * 1024 });
+  return parseCurl(stdout);
+}
+
+async function curlPost(
+  cookieHeader: string,
+  url: string,
+  fields: Record<string, string>,
+  referer?: string,
+): Promise<CurlResp> {
+  const args = ["-sS", "-i", "-X", "POST", "-A", UA, url, "-H", `Cookie: ${cookieHeader}`];
+  if (referer) args.push("-e", referer);
+  args.push("-H", "Origin: https://www.routenote.com");
+  for (const [k, v] of Object.entries(fields)) args.push("--data-urlencode", `${k}=${v}`);
+  const { stdout } = await execP("curl", args, { maxBuffer: 200 * 1024 * 1024 });
+  return parseCurl(stdout);
+}
+
+async function curlMultipart(
+  cookieHeader: string,
+  url: string,
+  fields: Record<string, string>,
+  files: Array<{ field: string; path: string; filename: string; contentType: string }>,
+  referer?: string,
+): Promise<CurlResp> {
+  // Critical: do NOT pass `-c <jar>`. Empirically that breaks multipart on this WAF.
+  const args = ["-sS", "-i", "-X", "POST", "-A", UA, url, "-H", `Cookie: ${cookieHeader}`];
+  if (referer) args.push("-e", referer);
+  args.push("-H", "Origin: https://www.routenote.com");
+  for (const f of files) {
+    args.push("-F", `${f.field}=@${f.path};type=${f.contentType};filename=${f.filename}`);
   }
-  return { res, body, jar: newJar };
+  for (const [k, v] of Object.entries(fields)) args.push("-F", `${k}=${v}`);
+  const { stdout } = await execP("curl", args, { maxBuffer: 200 * 1024 * 1024 });
+  return parseCurl(stdout);
 }
 
 function escapeRe(s: string): string {
@@ -136,17 +131,16 @@ function escapeRe(s: string): string {
 
 function scrapeHidden(html: string, name: string): string | null {
   const safe = escapeRe(name);
-  const re = new RegExp(`<input[^>]*name=["']${safe}["'][^>]*value=["']([^"']*)["']`, "i");
-  const m = html.match(re);
-  if (m) return m[1];
+  const re1 = new RegExp(`<input[^>]*name=["']${safe}["'][^>]*value=["']([^"']*)["']`, "i");
+  const m1 = html.match(re1);
+  if (m1) return m1[1];
   const re2 = new RegExp(`<input[^>]*value=["']([^"']*)["'][^>]*name=["']${safe}["']`, "i");
   const m2 = html.match(re2);
   return m2 ? m2[1] : null;
 }
 
-function findUpcInBodyOrLocation(res: Response, body: string): string | null {
-  const loc = res.headers.get("location") ?? "";
-  const m = loc.match(/\/edit_album\/(\d{8,16})/);
+function findUpc(loc: string | null, body: string): string | null {
+  const m = (loc || "").match(/\/edit_album\/(\d{8,16})/);
   if (m) return m[1];
   const m2 = body.match(/\/edit_album\/(\d{8,16})/);
   return m2 ? m2[1] : null;
@@ -154,89 +148,48 @@ function findUpcInBodyOrLocation(res: Response, body: string): string | null {
 
 function findFormErrors(html: string): string[] {
   const errs: string[] = [];
-  const errorBlock = html.match(/class=["']messages[^"']*error[^"']*["'][^>]*>([\s\S]{0,2000}?)<\/div>/i);
-  if (errorBlock) errs.push(stripTags(errorBlock[1]).trim().slice(0, 240));
+  const block = html.match(/class=["']messages[^"']*error[^"']*["'][^>]*>([\s\S]{0,2000}?)<\/div>/i);
+  if (block) {
+    errs.push(
+      block[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 240),
+    );
+  }
   const formErrs = [...html.matchAll(/class=["']form-error[^"']*["'][^>]*>([^<]{2,200})/g)];
   for (const m of formErrs) errs.push(m[1].trim());
   return errs.filter(Boolean);
 }
 
-function stripTags(s: string): string {
-  return s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-}
-
-async function getFormMeta(
-  jar: CookieEntry[],
-  url: string,
-  formId: string,
-): Promise<{ jar: CookieEntry[]; html: string; build: string; token: string }> {
-  const r = await rnFetch(url, jar);
-  if (r.res.status >= 300 && r.res.status < 400) {
-    const loc = r.res.headers.get("location") ?? "";
-    if (loc.toLowerCase().includes("/login")) throw new Error("auth-expired");
-  }
-  const build = scrapeHidden(r.body, "form_build_id");
-  const token = scrapeHidden(r.body, "form_token");
-  if (!build || !token) {
-    throw new Error(`could not scrape form_build_id/form_token at ${url} (formId=${formId})`);
-  }
-  return { jar: r.jar, html: r.body, build, token };
-}
-
-async function postUrlencoded(
-  jar: CookieEntry[],
-  url: string,
-  fields: Record<string, string>,
-): Promise<{ res: Response; body: string; jar: CookieEntry[] }> {
-  const sp = new URLSearchParams();
-  for (const [k, v] of Object.entries(fields)) sp.append(k, v);
-  return rnFetch(url, jar, {
-    method: "POST",
-    body: sp.toString(),
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Origin: "https://www.routenote.com",
-      Referer: url,
-    },
-  });
-}
-
-async function postMultipart(
-  jar: CookieEntry[],
-  url: string,
-  fields: Record<string, string>,
-  files: Array<{ field: string; filename: string; contentType: string; data: Buffer }>,
-): Promise<{ res: Response; body: string; jar: CookieEntry[] }> {
-  const fd = new FormData();
-  for (const [k, v] of Object.entries(fields)) fd.append(k, v);
-  for (const f of files) {
-    // Copy into a fresh ArrayBuffer to satisfy TS's strict BlobPart typing
-    const ab = new ArrayBuffer(f.data.byteLength);
-    new Uint8Array(ab).set(f.data);
-    fd.append(f.field, new Blob([ab], { type: f.contentType }), f.filename);
-  }
-  return rnFetch(url, jar, {
-    method: "POST",
-    body: fd,
-    headers: {
-      Origin: "https://www.routenote.com",
-      Referer: url,
-    },
-  });
-}
-
-const ROUTENOTE_GENRES = ["Pop","Rock","Hip Hop","Electronic","Dance","Classical","Jazz","Country","Folk","R&B/Soul","Alternative","Indie","Reggae","Latin","Metal","Blues","Other"];
-function pickGenre(g?: string): string {
-  if (!g) return "Electronic";
-  const m = ROUTENOTE_GENRES.find((x) => x.toLowerCase() === g.toLowerCase());
-  if (m) return m;
-  if (g.toLowerCase().includes("cinematic")) return "Classical";
-  if (g.toLowerCase().includes("folk") || g.toLowerCase().includes("irish")) return "Folk";
-  return "Electronic";
-}
-
 function futureDateISO(daysAhead: number): string {
-  return new Date(Date.now() + daysAhead * 86400 * 1000).toISOString().slice(0, 10);
+  const d = new Date(Date.now() + daysAhead * 86400000);
+  return d.toISOString().slice(0, 10);
+}
+
+function pickGenre(g?: string): string {
+  // Genres confirmed valid in RouteNote autocomplete. Anything else falls back to "Other".
+  const map: Record<string, string> = {
+    cinematic: "Classical",
+    "film score": "Classical",
+    folk: "Folk",
+    electronic: "Electronic",
+    rock: "Rock",
+    pop: "Pop",
+    "hip-hop": "Hip Hop",
+    "hip hop": "Hip Hop",
+    jazz: "Jazz",
+    country: "Country",
+    classical: "Classical",
+    "r&b": "R&B/Soul",
+    soul: "R&B/Soul",
+    reggae: "Reggae",
+    latin: "Latin",
+    metal: "Metal",
+    blues: "Blues",
+    indie: "Indie",
+    alternative: "Alternative",
+    dance: "Dance",
+  };
+  if (!g) return "Other";
+  return map[g.toLowerCase()] || "Other";
 }
 
 export async function distributeRouteNoteHttp(
@@ -246,189 +199,271 @@ export async function distributeRouteNoteHttp(
 ): Promise<DistributeResult> {
   const steps: DistributeStepResult[] = [];
   const out: DistributeResult = { loggedIn: false, steps, cookies };
-  let jar = cookies;
+  const cookieHeader = buildCookieHeader(cookies);
 
-  // STEP 1: probe auth + get create_album form tokens
+  // Stage audio + cover to disk so curl can stream them as multipart files.
+  const work = await mkdtemp(join(tmpdir(), "rn-"));
+  const audioPath = join(work, input.audioFilename || "audio.mp3");
+  await writeFile(audioPath, input.audioBuffer);
+  let coverPath: string | null = null;
+  if (input.coverBuffer) {
+    coverPath = join(work, input.coverFilename || "cover.jpg");
+    await writeFile(coverPath, input.coverBuffer);
+  }
+
+  // STEP 1: probe auth + scrape create_album form
   log("auth:probe");
-  let createMeta: { jar: CookieEntry[]; html: string; build: string; token: string };
-  try {
-    createMeta = await getFormMeta(jar, "https://www.routenote.com/rn/create_album", "create-album-form");
-  } catch (e) {
-    if ((e as Error).message === "auth-expired") {
-      steps.push({ step: "auth", ok: false, detail: "cookies expired — re-bootstrap" });
-      return out;
-    }
-    steps.push({ step: "auth", ok: false, detail: (e as Error).message });
+  const cm = await curlGet(cookieHeader, "https://www.routenote.com/rn/create_album");
+  if (cm.status >= 300 && cm.status < 400 && (cm.location || "").toLowerCase().includes("/login")) {
+    steps.push({ step: "auth", ok: false, detail: "cookies expired — re-bootstrap" });
     return out;
   }
-  jar = createMeta.jar;
+  if (!cm.body.includes('id="create-album-form"')) {
+    steps.push({ step: "auth", ok: false, detail: "create_album form not in response (WAF block?)" });
+    return out;
+  }
   out.loggedIn = true;
 
-  // STEP 2: POST create_album with release date
+  // STEP 2: create release
   log("create:post");
   const releaseDate = input.releaseDate ?? futureDateISO(21);
-  const tersawsasCreate = scrapeHidden(createMeta.html, "tersawsas") ?? "true";
-  const cr = await postUrlencoded(jar, "https://www.routenote.com/rn/create_album", {
-    edit_album_info_upc: "",
-    edit_album_info_release: releaseDate,
-    tersawsas: tersawsasCreate,
-    form_id: "create-album-form",
-    form_build_id: createMeta.build,
-    form_token: createMeta.token,
-    album_save: "Create Release",
-  });
-  jar = cr.jar;
-  const upc = findUpcInBodyOrLocation(cr.res, cr.body);
+  const tersaCreate = scrapeHidden(cm.body, "tersawsas") ?? "true";
+  const createRes = await curlPost(
+    cookieHeader,
+    "https://www.routenote.com/rn/create_album",
+    {
+      edit_album_info_upc: "",
+      edit_album_info_release: releaseDate,
+      tersawsas: tersaCreate,
+      form_id: scrapeHidden(cm.body, "form_id") || "create_album_form",
+      form_build_id: scrapeHidden(cm.body, "form_build_id") || "",
+      form_token: scrapeHidden(cm.body, "form_token") || "",
+      album_save: "Create Release",
+    },
+    "https://www.routenote.com/rn/create_album",
+  );
+  const upc = findUpc(createRes.location, createRes.body);
   if (!upc) {
-    const errs = findFormErrors(cr.body);
-    steps.push({ step: "create", ok: false, detail: `no UPC; status=${cr.res.status}; errors=${errs.join(" | ").slice(0, 240)}` });
+    steps.push({
+      step: "create",
+      ok: false,
+      detail: `no UPC; status=${createRes.status}; errors=${findFormErrors(createRes.body).join(" | ").slice(0, 200)}`,
+    });
     return out;
   }
   out.upc = upc;
+  out.liveViewUrl = `https://www.routenote.com/rn/edit_album/${upc}`;
   steps.push({ step: "create", ok: true, detail: `upc=${upc}` });
   log("create:ok", upc);
 
-  // STEP 3: edit album details
-  log("album:get-form");
   const editUrl = `https://www.routenote.com/rn/editalbum/${upc}`;
-  const editMeta = await getFormMeta(jar, editUrl, "editalbum-form");
-  jar = editMeta.jar;
 
-  const language = input.language ?? "English";
-  const genre = pickGenre(input.genre);
-  const year = String(new Date().getFullYear());
-  const firstName = input.artistName.split(" ")[0] || input.artistName;
-  const lastName = input.artistName.split(" ").slice(1).join(" ") || "Artist";
+  // STEP 3: album metadata
+  log("album:get-form");
+  const em = await curlGet(cookieHeader, editUrl);
+  log("album:post");
+  const yr = String(new Date().getFullYear());
+  const artistName = input.artistName;
+  const firstName = artistName.split(" ")[0] || artistName;
+  const lastName = artistName.split(" ").slice(1).join(" ") || "Artist";
 
   const albumFields: Record<string, string> = {
-    edit_album_info_language: language,
+    edit_album_info_language: input.language ?? "English",
     edit_album_info_title: input.title,
-    edit_album_info_artist: input.artistName,
-    edit_album_info_genre: genre,
-    edit_album_info_label: input.artistName,
-    cpy_year: year,
-    cpy_name: input.artistName,
-    edit_album_info_pcopyyear: year,
-    edit_album_info_pcopyname: input.artistName,
+    edit_album_info_artist: artistName,
+    edit_album_info_genre: pickGenre(input.genre),
+    edit_album_info_label: artistName,
+    cpy_year: yr,
+    cpy_name: artistName,
+    edit_album_info_pcopyyear: yr,
+    edit_album_info_pcopyname: artistName,
     edit_album_first_composer: firstName,
     edit_album_last_composer: lastName,
-    edit_album_first_contributor: input.artistName,
+    edit_album_first_contributor: artistName,
     edit_album_info_release: releaseDate,
-    // Yes/No questions — choose "No" defaults
+    edit_album_info_org_date: releaseDate,
     No: "1",
     No1: "1",
     No3: "1",
-    form_id: "editalbum-form",
-    form_build_id: editMeta.build,
-    form_token: editMeta.token,
+    form_id: scrapeHidden(em.body, "form_id") || "editalbum_form",
+    form_build_id: scrapeHidden(em.body, "form_build_id") || "",
+    form_token: scrapeHidden(em.body, "form_token") || "",
     album_save: "Save and Continue",
   };
-  const tersawsasEdit = scrapeHidden(editMeta.html, "tersawsas");
-  if (tersawsasEdit !== null) albumFields.tersawsas = tersawsasEdit;
+  const tersaEdit = scrapeHidden(em.body, "tersawsas");
+  if (tersaEdit !== null) albumFields.tersawsas = tersaEdit;
   if (input.explicit) {
     albumFields.Yes2 = "1";
     delete albumFields.No3;
   }
-
-  log("album:post");
-  const ar = await postUrlencoded(jar, editUrl, albumFields);
-  jar = ar.jar;
-  const albumOk = ar.res.status === 302 || (!findFormErrors(ar.body).length && !/messages.*error/i.test(ar.body));
-  steps.push({ step: "album", ok: albumOk, detail: `status=${ar.res.status}; errors=${findFormErrors(ar.body).join(" | ").slice(0, 200) || "-"}` });
+  const albumRes = await curlPost(cookieHeader, editUrl, albumFields, editUrl);
+  const albumOk = albumRes.status === 302 || (!findFormErrors(albumRes.body).length && !/messages.*error/i.test(albumRes.body));
+  steps.push({
+    step: "album",
+    ok: albumOk,
+    detail: `status=${albumRes.status}; errors=${findFormErrors(albumRes.body).join(" | ").slice(0, 200) || "-"}`,
+  });
 
   // STEP 4: audio upload
   try {
-    log("audio:get-form");
-    const audioUrl = `https://www.routenote.com/rn/addaudiomp3/form/${upc}`;
-    const audioMeta = await getFormMeta(jar, audioUrl, "addaudio");
-    jar = audioMeta.jar;
     log("audio:post");
-    const ur = await postMultipart(
-      jar,
+    const audioUrl = `https://www.routenote.com/rn/addaudiomp3/form/${upc}`;
+    const am = await curlGet(cookieHeader, audioUrl);
+    const audioFields: Record<string, string> = {
+      tracknio1: input.title,
+      form_id: scrapeHidden(am.body, "form_id") || "addaudio",
+      form_build_id: scrapeHidden(am.body, "form_build_id") || "",
+      form_token: scrapeHidden(am.body, "form_token") || "",
+      op: "Save",
+    };
+    const tersaAudio = scrapeHidden(am.body, "tersawsas");
+    if (tersaAudio !== null) audioFields.tersawsas = tersaAudio;
+    const audioRes = await curlMultipart(
+      cookieHeader,
       audioUrl,
-      {
-        tracknio1: input.title,
-        text_val: "",
-        form_id: scrapeHidden(audioMeta.html, "form_id") ?? "",
-        form_build_id: audioMeta.build,
-        form_token: audioMeta.token,
-        op: "Save and continue",
-      },
+      audioFields,
       [
         {
           field: "files[audio]",
+          path: audioPath,
           filename: input.audioFilename,
           contentType: input.audioContentType,
-          data: input.audioBuffer,
         },
       ],
+      audioUrl,
     );
-    jar = ur.jar;
-    const audioOk = ur.res.status === 302 || (!findFormErrors(ur.body).length && !/messages.*error/i.test(ur.body));
-    steps.push({ step: "audio", ok: audioOk, detail: `status=${ur.res.status}; errors=${findFormErrors(ur.body).join(" | ").slice(0, 200) || "-"}` });
+    const audioOk = audioRes.status === 302 || /trackmetadata/i.test(audioRes.location || "");
+    steps.push({
+      step: "audio",
+      ok: audioOk,
+      detail: `status=${audioRes.status}; loc=${audioRes.location ?? "-"}`,
+    });
   } catch (e) {
     steps.push({ step: "audio", ok: false, detail: (e as Error).message });
   }
 
-  // STEP 5: artwork
-  if (input.coverBuffer) {
+  // STEP 5: artwork upload
+  if (coverPath) {
     try {
-      log("art:get-form");
-      const artUrl = `https://www.routenote.com/rn/addart/form/${upc}`;
-      const artMeta = await getFormMeta(jar, artUrl, "addart");
-      jar = artMeta.jar;
       log("art:post");
-      const cr2 = await postMultipart(
-        jar,
+      const artUrl = `https://www.routenote.com/rn/addart/form/${upc}`;
+      const artRes = await curlMultipart(
+        cookieHeader,
         artUrl,
-        {
-          form_id: scrapeHidden(artMeta.html, "form_id") ?? "",
-          form_build_id: artMeta.build,
-          form_token: artMeta.token,
-          op: "Save and continue",
-        },
+        { tersawsas: "true", addart_savbtn: "Save and Continue" },
         [
           {
-            field: "files[audio_images]",
-            filename: input.coverFilename ?? "cover.jpg",
+            field: "audio_images",
+            path: coverPath,
+            filename: input.coverFilename || "cover.jpg",
             contentType: "image/jpeg",
-            data: input.coverBuffer,
           },
         ],
+        artUrl,
       );
-      jar = cr2.jar;
-      const artOk = cr2.res.status === 302 || (!findFormErrors(cr2.body).length && !/messages.*error/i.test(cr2.body));
-      steps.push({ step: "art", ok: artOk, detail: `status=${cr2.res.status}; errors=${findFormErrors(cr2.body).join(" | ").slice(0, 200) || "-"}` });
+      const artOk = artRes.status === 302;
+      steps.push({
+        step: "art",
+        ok: artOk,
+        detail: `status=${artRes.status}; loc=${artRes.location ?? "-"}`,
+      });
     } catch (e) {
       steps.push({ step: "art", ok: false, detail: (e as Error).message });
     }
   }
 
-  // STEP 6: stores
+  // STEP 6: per-track metadata
   try {
-    log("stores:get-form");
-    const storeUrl = `https://www.routenote.com/rn/addstore/form/${upc}`;
-    const storeMeta = await getFormMeta(jar, storeUrl, "addstore");
-    jar = storeMeta.jar;
-    // collect all did<N> checkbox names
-    const dids = [...new Set([...storeMeta.html.matchAll(/name=["'](did\d+)["']/g)].map((m) => m[1]))];
-    const storeFields: Record<string, string> = {
-      "edit-selall": "1",
-      form_id: scrapeHidden(storeMeta.html, "form_id") ?? "",
-      form_build_id: storeMeta.build,
-      form_token: storeMeta.token,
-      album_save: "Save and Continue",
+    log("trackmeta:post");
+    const tmUrl = `https://www.routenote.com/rn/trackmetadata/form/${upc}`;
+    const tm = await curlGet(cookieHeader, tmUrl);
+    // Echo back every existing form input value so we don't lose hidden defaults (ISRC etc.)
+    const tmFields: Record<string, string> = {};
+    const tmFormStart = tm.body.indexOf("<form");
+    const tmFormEnd = tm.body.indexOf("</form>", tmFormStart);
+    const tmFormHtml = tm.body.slice(tmFormStart, tmFormEnd);
+    for (const m of tmFormHtml.matchAll(/<input[^>]*name="([^"]+)"[^>]*value="([^"]*)"/g)) {
+      if (m[1].startsWith("file[") || m[1] === "files[audio]") continue;
+      if (!(m[1] in tmFields)) tmFields[m[1]] = m[2];
+    }
+    for (const sm of tmFormHtml.matchAll(/<select[^>]*name="([^"]+)"[^>]*>([\s\S]*?)<\/select>/g)) {
+      const sel = sm[2].match(/<option[^>]*selected[^>]*value="([^"]*)"/);
+      if (sel) tmFields[sm[1]] = sel[1];
+      else if (!(sm[1] in tmFields)) tmFields[sm[1]] = "";
+    }
+    tmFields["audio_tags0[title]"] = input.title;
+    tmFields["audio_tags0[trackno]"] = "1";
+    tmFields["audio_tags0[role]"] = "Primary";
+    tmFields["audio_tags0[artist]"] = artistName;
+    tmFields.edit_album_first_composer = firstName;
+    tmFields.edit_album_last_composer = lastName;
+    tmFields.edit_album_first_contributor = artistName;
+    tmFields.edit_album_info_language0 = input.language ?? "English";
+    tmFields.edit_album_info_explicit0 = input.explicit ? "1" : "0";
+    tmFields.op = "Save and Continue";
+    const tmRes = await curlPost(cookieHeader, tmUrl, tmFields, tmUrl);
+    const tmOk = tmRes.status === 302 || /confirm_upload/i.test(tmRes.location || "");
+    steps.push({
+      step: "trackmeta",
+      ok: tmOk,
+      detail: `status=${tmRes.status}; loc=${tmRes.location ?? "-"}; errors=${findFormErrors(tmRes.body).join(" | ").slice(0, 200) || "-"}`,
+    });
+  } catch (e) {
+    steps.push({ step: "trackmeta", ok: false, detail: (e as Error).message });
+  }
+
+  // STEP 7: confirm upload (I'm Finished)
+  try {
+    log("confirm:post");
+    const cuUrl = `https://www.routenote.com/rn/confirm_upload/form/${upc}`;
+    const cu = await curlGet(cookieHeader, cuUrl);
+    const cuFields: Record<string, string> = {
+      op: "I'm Finished",
+      form_id: scrapeHidden(cu.body, "form_id") || "confirm_upload_form",
+      form_build_id: scrapeHidden(cu.body, "form_build_id") || "",
+      form_token: scrapeHidden(cu.body, "form_token") || "",
     };
-    for (const d of dids) storeFields[d] = "1";
-    log("stores:post", `${dids.length} stores`);
-    const sr = await postUrlencoded(jar, storeUrl, storeFields);
-    jar = sr.jar;
-    const storesOk = sr.res.status === 302 || (!findFormErrors(sr.body).length && !/messages.*error/i.test(sr.body));
-    steps.push({ step: "stores", ok: storesOk, detail: `status=${sr.res.status}; ${dids.length} dids; errors=${findFormErrors(sr.body).join(" | ").slice(0, 200) || "-"}` });
+    const tersaCU = scrapeHidden(cu.body, "tersawsas");
+    if (tersaCU !== null) cuFields.tersawsas = tersaCU;
+    const cuRes = await curlPost(cookieHeader, cuUrl, cuFields, cuUrl);
+    steps.push({
+      step: "confirm",
+      ok: cuRes.status === 302,
+      detail: `status=${cuRes.status}; loc=${cuRes.location ?? "-"}`,
+    });
+  } catch (e) {
+    steps.push({ step: "confirm", ok: false, detail: (e as Error).message });
+  }
+
+  // STEP 8: store selection (select all)
+  try {
+    log("stores:post");
+    const stUrl = `https://www.routenote.com/rn/addstore/form/${upc}`;
+    const st = await curlGet(cookieHeader, stUrl);
+    const dids = [...new Set([...st.body.matchAll(/name="(did\d+)"/g)].map((m) => m[1]))];
+    const stFields: Record<string, string> = {
+      "edit-selall": "1",
+      approve_val: "1",
+      album_save: "Save and Continue",
+      op: "Save",
+      form_id: scrapeHidden(st.body, "form_id") || "addstore_form",
+      form_build_id: scrapeHidden(st.body, "form_build_id") || "",
+      form_token: scrapeHidden(st.body, "form_token") || "",
+    };
+    for (const d of dids) stFields[d] = "1";
+    const tersaST = scrapeHidden(st.body, "tersawsas");
+    if (tersaST !== null) stFields.tersawsas = tersaST;
+    const hideStore = scrapeHidden(st.body, "hidestorevalue");
+    if (hideStore) stFields.hidestorevalue = hideStore;
+    const stRes = await curlPost(cookieHeader, stUrl, stFields, stUrl);
+    steps.push({
+      step: "stores",
+      ok: stRes.status === 302,
+      detail: `status=${stRes.status}; ${dids.length} stores; errors=${findFormErrors(stRes.body).join(" | ").slice(0, 100) || "-"}`,
+    });
   } catch (e) {
     steps.push({ step: "stores", ok: false, detail: (e as Error).message });
   }
 
-  out.cookies = jar;
   return out;
 }
