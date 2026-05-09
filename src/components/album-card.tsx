@@ -193,29 +193,7 @@ export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, s
                   <span className="text-[0.75rem] w-4 text-center">✎</span>
                   <span className="font-display">Edit</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    setMenuOpen(false);
-                    const url = `${window.location.origin}/share/album/${artist}/${slug}`;
-                    try {
-                      const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
-                      if (nav.share) {
-                        await nav.share({ title: name, text: `Listen to ${name}`, url });
-                      } else {
-                        await navigator.clipboard.writeText(url);
-                        // simple visual feedback via title attribute mutation is too subtle — alert
-                        alert(`Share link copied:\n${url}`);
-                      }
-                    } catch {}
-                  }}
-                  className="w-full px-3 py-1.5 text-[0.7rem] text-left flex items-center gap-2.5 text-paper hover:bg-cyan/[0.08] hover:text-cyan transition-colors"
-                >
-                  <span className="text-[0.75rem] w-4 text-center">↗</span>
-                  <span className="font-display">Share</span>
-                </button>
+                <ShareMenuItem artist={artist} slug={slug} name={name} onClick={() => setMenuOpen(false)} />
                 <div className="my-1 mx-2 h-px bg-brd" />
                 <button
                   type="button"
@@ -254,5 +232,36 @@ export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, s
         />
       ) : null}
     </div>
+  );
+}
+
+function ShareMenuItem({ artist, slug, name, onClick }: { artist: string; slug: string; name: string; onClick: () => void }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const url = `${window.location.origin}/share/album/${artist}/${slug}`;
+        try {
+          const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
+          if (nav.share) {
+            await nav.share({ title: name, url });
+            onClick();
+          } else {
+            await navigator.clipboard.writeText(url);
+            setCopied(true);
+            setTimeout(() => { setCopied(false); onClick(); }, 900);
+          }
+        } catch {
+          onClick();
+        }
+      }}
+      className="w-full px-3 py-1.5 text-[0.7rem] text-left flex items-center gap-2.5 text-paper hover:bg-cyan/[0.08] hover:text-cyan transition-colors"
+    >
+      <span className="text-[0.75rem] w-4 text-center">↗</span>
+      <span className="font-display">{copied ? "Link copied" : "Share"}</span>
+    </button>
   );
 }

@@ -197,22 +197,7 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
               ▶ Play all
             </button>
             <Btn onClick={shuffle} disabled={!queue.length}>⤮ Shuffle</Btn>
-            <Btn
-              onClick={async () => {
-                const url = `${window.location.origin}/share/album/${artist}/${album}`;
-                try {
-                  const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
-                  if (nav.share) {
-                    await nav.share({ title: albumRow.name, text: `Listen to ${albumRow.name}`, url });
-                  } else {
-                    await navigator.clipboard.writeText(url);
-                    alert(`Share link copied:\n${url}`);
-                  }
-                } catch {}
-              }}
-            >
-              🔗 Share
-            </Btn>
+            <ShareBtn artist={artist} album={album} albumName={albumRow.name} />
             <div className="ml-auto flex items-center gap-2">
               <Btn onClick={toggleComplete} variant={isComplete ? "green" : "subtle"}>
                 {isComplete ? "✓ Complete" : "Mark complete"}
@@ -296,6 +281,26 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
         </div>
       </div>
     </main>
+  );
+}
+
+function ShareBtn({ artist, album, albumName }: { artist: string; album: string; albumName: string }) {
+  const [copied, setCopied] = useState(false);
+  const onClick = async () => {
+    const url = `${window.location.origin}/share/album/${artist}/${album}`;
+    try {
+      const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
+      if (nav.share) {
+        await nav.share({ title: albumName, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1400);
+      }
+    } catch {}
+  };
+  return (
+    <Btn onClick={onClick}>{copied ? "✓ Copied" : "🔗 Share"}</Btn>
   );
 }
 
