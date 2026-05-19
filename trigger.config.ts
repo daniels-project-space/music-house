@@ -3,7 +3,8 @@ import { playwright } from "@trigger.dev/build/extensions/playwright";
 import { ffmpeg, additionalPackages } from "@trigger.dev/build/extensions/core";
 
 export default defineConfig({
-  project: process.env.TRIGGER_PROJECT_REF ?? "",
+  // Hardcoded: env-fallback silently deployed to phantom project
+  project: "proj_ukkzrxclaoncuvhvqpud",
   runtime: "node",
   logLevel: "log",
   maxDuration: 3600,
