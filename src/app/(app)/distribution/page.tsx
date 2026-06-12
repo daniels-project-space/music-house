@@ -11,6 +11,20 @@ export default function DistributionPage() {
   const setComplete = useMutation(api.distribution.setComplete);
   const [busy, setBusy] = useState<string | null>(null);
   const [distributor, setDistributor] = useState<"routenote" | "distrokid">("distrokid");
+  const analytics = useQuery(api.distributorAnalytics.latest, { distributor: "distrokid" });
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refreshAnalytics = async () => {
+    setRefreshing(true);
+    try {
+      const r = await fetch("/api/analytics/refresh", { method: "POST" });
+      if (!r.ok) alert(`Failed to refresh: ${await r.text()}`);
+    } catch (e) {
+      alert(`Failed: ${(e as Error).message}`);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const jobByTrack = new Map<string, (typeof jobs)[number]>();
   for (const j of jobs) {
@@ -87,6 +101,37 @@ export default function DistributionPage() {
           </a>
         </div>
       </div>
+      {distributor === "distrokid" ? (
+        <div
+          className="flex flex-wrap items-center gap-x-6 gap-y-2 mb-4 px-3.5 py-2.5 rounded-lg border bg-card"
+          style={{ borderColor: "var(--color-brd)" }}
+        >
+          <Metric label="Streams" value={analytics ? analytics.streamsTotal.toLocaleString() : "—"} />
+          <Metric
+            label="Balance"
+            value={
+              analytics
+                ? (analytics.currency === "GBP" ? "£" : analytics.currency === "USD" ? "$" : "€") +
+                  analytics.balance.toFixed(2)
+                : "—"
+            }
+          />
+          <span className="font-mono text-[0.5rem] uppercase tracking-[0.14em] text-paper-faint">
+            {analytics
+              ? "as of " + new Date(analytics.fetchedAt).toLocaleString()
+              : "no snapshot yet — hit refresh"}
+            {analytics?.streamsPending ? " · ingestion pending" : ""}
+          </span>
+          <button
+            onClick={refreshAnalytics}
+            disabled={refreshing}
+            className="ml-auto font-mono text-[0.55rem] uppercase tracking-[0.14em] px-2.5 py-1 rounded border text-cyan hover:bg-cyan/[0.06] transition-colors disabled:opacity-40"
+            style={{ borderColor: "rgba(6,182,212,0.4)" }}
+          >
+            {refreshing ? "Queueing…" : "Refresh stats"}
+          </button>
+        </div>
+      ) : null}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <Column color="#34d399" label="Ready">
           {ready.length === 0 ? (
@@ -129,8 +174,11 @@ export default function DistributionPage() {
                     : "draft ready";
               return (
                 <Row key={t._id} track={t}>
-                  <span className="font-mono text-[0.5rem] uppercase tracking-[0.14em] text-paper-faint mr-2">
-                    {statusLabel}
+                  <span
+                    className="font-mono text-[0.5rem] uppercase tracking-[0.14em] text-paper-faint mr-2 max-w-[200px] truncate"
+                    title={j.progress ?? statusLabel}
+                  >
+                    {j.status === "running" && j.progress ? j.progress : statusLabel}
                   </span>
                   {j.liveViewUrl ? (
                     <a
@@ -199,6 +247,15 @@ function Column({
       </div>
       <ul className="space-y-0.5">{children}</ul>
     </section>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <span className="font-mono text-[0.5rem] uppercase tracking-[0.16em] text-paper-faint">{label}</span>
+      <span className="font-display text-[0.95rem] font-bold text-paper">{value}</span>
+    </div>
   );
 }
 

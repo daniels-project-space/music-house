@@ -139,6 +139,11 @@ export const setFailed = mutation({
     ctx.db.patch(id, { status: "failed", error, completedAt: Date.now() }),
 });
 
+export const setProgress = mutation({
+  args: { id: v.id("distributionJobs"), progress: v.string() },
+  handler: async (ctx, { id, progress }) => ctx.db.patch(id, { progress }),
+});
+
 // Store pasted distributor session cookies (RouteNote or DistroKid) into
 // distributorAuth. Upserts by distributor, mirroring distributorAuth.save.
 export const setDistributorCookies = mutation({

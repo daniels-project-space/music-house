@@ -127,6 +127,8 @@ export default defineSchema({
     })),
     isrc: v.optional(v.string()),
     error: v.optional(v.string()),
+    // Live progress line written by the distribute task (UI: In Progress column).
+    progress: v.optional(v.string()),
     createdAt: v.number(),
     completedAt: v.optional(v.number()),
   })
@@ -139,6 +141,20 @@ export default defineSchema({
     distributor: v.union(v.literal("routenote"), v.literal("distrokid")),
     cookiesJson: v.string(),
     savedAt: v.number(),
+  }).index("by_distributor", ["distributor"]),
+
+  // Latest analytics snapshot per distributor (streams + bank balance),
+  // written by the distrokid-analytics Trigger task (upsert, one row each).
+  distributorAnalytics: defineTable({
+    distributor: v.union(v.literal("routenote"), v.literal("distrokid")),
+    fetchedAt: v.number(),
+    streamsTotal: v.number(),
+    streamsPending: v.boolean(),
+    streamsItemsJson: v.string(),
+    balance: v.number(),
+    currency: v.string(),
+    balancePending: v.boolean(),
+    message: v.optional(v.string()),
   }).index("by_distributor", ["distributor"]),
 
   savedLyrics: defineTable({
