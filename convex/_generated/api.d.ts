@@ -11,6 +11,7 @@
 import type * as albums from "../albums.js";
 import type * as artists from "../artists.js";
 import type * as distribution from "../distribution.js";
+import type * as distributorAnalytics from "../distributorAnalytics.js";
 import type * as distributorAuth from "../distributorAuth.js";
 import type * as hearts from "../hearts.js";
 import type * as http from "../http.js";
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   albums: typeof albums;
   artists: typeof artists;
   distribution: typeof distribution;
+  distributorAnalytics: typeof distributorAnalytics;
   distributorAuth: typeof distributorAuth;
   hearts: typeof hearts;
   http: typeof http;
