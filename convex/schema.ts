@@ -162,6 +162,17 @@ export default defineSchema({
     message: v.optional(v.string()),
   }).index("by_distributor", ["distributor"]),
 
+  // Append-only time series behind the streams/earnings graph (one row per
+  // analytics pull — the scheduled task runs every 2 days; manual refreshes
+  // within 6h of the last point update it in place instead of appending).
+  distributorAnalyticsHistory: defineTable({
+    distributor: v.union(v.literal("routenote"), v.literal("distrokid")),
+    fetchedAt: v.number(),
+    streamsTotal: v.number(),
+    balance: v.number(),
+    currency: v.string(),
+  }).index("by_distributor_time", ["distributor", "fetchedAt"]),
+
   savedLyrics: defineTable({
     title: v.string(),
     vibe: v.optional(v.string()),

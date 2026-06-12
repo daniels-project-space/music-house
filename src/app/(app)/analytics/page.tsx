@@ -1,28 +1,70 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 
-const PLATFORMS = [
-  { name: "Spotify", share: 0.35, color: "#1db954" },
-  { name: "Apple Music", share: 0.25, color: "#fa233b" },
-  { name: "Amazon Music", share: 0.12, color: "#ff9900" },
-  { name: "YouTube Music", share: 0.15, color: "#ff0033" },
-  { name: "SoundCloud", share: 0.07, color: "#ff5500" },
-  { name: "Tidal", share: 0.06, color: "#00d4ff" },
-];
+// Blended per-stream payout estimate (USD) used until DistroKid's bank reports
+// real money (stores pay out on a ~2-3 month lag). Spotify ~0.003-0.004,
+// Apple ~0.007, YT Music ~0.002 — 0.0035 is the standard blended figure.
+const USD_PER_STREAM = 0.0035;
+
+const STORE_COLORS: Record<string, string> = {
+  spotify: "#1db954",
+  apple: "#fa233b",
+  itunes: "#fa233b",
+  amazon: "#ff9900",
+  youtube: "#ff0033",
+  soundcloud: "#ff5500",
+  tidal: "#00d4ff",
+  deezer: "#a238ff",
+  pandora: "#00a0ee",
+};
+
+function storeColor(store: string): string {
+  const k = store.toLowerCase();
+  for (const key of Object.keys(STORE_COLORS)) {
+    if (k.includes(key)) return STORE_COLORS[key];
+  }
+  return "#8b5cf6";
+}
+
+type StatsItem = { store?: string; date?: string; streams: number };
 
 export default function AnalyticsPage() {
   const tracks = useQuery(api.tracks.list, {}) ?? [];
   const albums = useQuery(api.albums.list, {}) ?? [];
+  const snapshot = useQuery(api.distributorAnalytics.latest, { distributor: "distrokid" });
+  const history = useQuery(api.distributorAnalytics.history, { distributor: "distrokid" }) ?? [];
+  const [refreshing, setRefreshing] = useState(false);
 
   const distributed = tracks.filter((t) => t.distributed).length;
   const distributedPct = tracks.length ? Math.round((distributed / tracks.length) * 100) : 0;
-  const totalCost = tracks.length * 0.025;
-  const monthlyEst = distributed * 2.25 + tracks.length * 0.6;
-  const yearlyEst = monthlyEst * 12;
-  const roi = totalCost > 0 ? Math.round(yearlyEst / totalCost) : 0;
   const mixed = tracks.filter((t) => (t.rating ?? 0) >= 4).length;
+
+  const streams = snapshot?.streamsTotal ?? 0;
+  const balance = snapshot?.balance ?? 0;
+  const currency = snapshot?.currency ?? "USD";
+  const estEarned = streams * USD_PER_STREAM;
+
+  // Per-store / per-day breakdown out of the scraped amCharts payload.
+  const items: StatsItem[] = useMemo(() => {
+    try {
+      return snapshot?.streamsItemsJson ? JSON.parse(snapshot.streamsItemsJson) : [];
+    } catch {
+      return [];
+    }
+  }, [snapshot?.streamsItemsJson]);
+
+  const storeSplit = useMemo(() => {
+    const byStore: Record<string, number> = {};
+    for (const it of items) {
+      if (!it.store) continue;
+      byStore[it.store] = (byStore[it.store] ?? 0) + it.streams;
+    }
+    return Object.entries(byStore).sort(([, a], [, b]) => b - a);
+  }, [items]);
+  const storeTotal = storeSplit.reduce((s, [, n]) => s + n, 0);
 
   const genreCounts: Record<string, number> = {};
   for (const t of tracks) {
@@ -32,21 +74,116 @@ export default function AnalyticsPage() {
   const sortedGenres = Object.entries(genreCounts).sort(([, a], [, b]) => b - a).slice(0, 18);
   const maxGenre = sortedGenres[0]?.[1] ?? 1;
 
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await fetch("/api/analytics/refresh", { method: "POST" });
+    } finally {
+      setTimeout(() => setRefreshing(false), 4000);
+    }
+  };
+
   return (
     <main className="px-5 sm:px-6 lg:px-8 pt-3 pb-32 animate-fi">
-      {/* 6-card stats grid like legacy */}
+      {/* 6-card stats grid — streams + money are REAL DistroKid figures */}
       <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
         <Stat label="Total Tracks" value={tracks.length} />
         <Stat label="Distributed" value={distributed} sub={`${distributedPct}% of catalog`} accent="green" />
-        <Stat label="Est. Monthly" value={`$${monthlyEst.toFixed(2)}`} sub={`$${yearlyEst.toFixed(0)}/yr`} highlight />
-        <Stat label="Cost" value={`$${totalCost.toFixed(2)}`} sub={roi > 0 ? `ROI ${roi.toLocaleString()}×/yr` : "—"} />
-        <Stat label="Mixed" value={mixed} accent="purple" />
-        <Stat label="Albums" value={albums.length} />
+        <Stat
+          label="Streams"
+          value={streams.toLocaleString()}
+          sub={snapshot ? `DistroKid · upd ${ago(snapshot.fetchedAt)}` : "awaiting first pull"}
+          highlight
+        />
+        <Stat
+          label="Bank Balance"
+          value={`$${balance.toFixed(2)}`}
+          sub={balance > 0 ? currency : snapshot?.message ?? "stores pay ~2-3mo behind"}
+          accent="green"
+        />
+        <Stat
+          label="Est. Earned"
+          value={`$${estEarned.toFixed(2)}`}
+          sub={`${streams.toLocaleString()} × $${USD_PER_STREAM}/stream`}
+          accent="purple"
+        />
+        <Stat label="Albums" value={albums.length} sub={`${mixed} mixed 4★+`} />
       </section>
 
-      {/* Genre + Platform inline */}
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+      {/* Streams over time (real history, pulled every 2 days) + store split */}
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-5">
         <div className="lg:col-span-8 rounded-lg border border-brd bg-card p-4">
+          <div className="flex items-baseline justify-between mb-3">
+            <h3 className="font-mono text-[0.55rem] uppercase tracking-[0.2em] text-paper-faint">Streams Over Time</h3>
+            <button
+              onClick={refresh}
+              disabled={refreshing}
+              className="font-mono text-[0.5rem] uppercase tracking-[0.16em] text-paper-faint hover:text-paper transition-colors disabled:opacity-40"
+            >
+              {refreshing ? "pulling…" : "refresh ↻"}
+            </button>
+          </div>
+          {history.length >= 2 ? (
+            <Spark
+              data={history.map((h) => h.streamsTotal)}
+              labels={history.map((h) => fmtDate(h.fetchedAt))}
+            />
+          ) : (
+            <div className="h-[120px] flex items-center justify-center">
+              <p className="font-mono text-[0.55rem] uppercase tracking-[0.16em] text-paper-faint">
+                {history.length === 1
+                  ? `1 data point (${history[0].streamsTotal.toLocaleString()} streams) — graph appears at the next 2-day pull`
+                  : "no pulls yet — hit refresh"}
+              </p>
+            </div>
+          )}
+        </div>
+
+        <aside className="lg:col-span-4 rounded-lg border border-brd bg-card p-4">
+          <div className="flex items-baseline justify-between mb-3">
+            <h3 className="font-mono text-[0.55rem] uppercase tracking-[0.2em] text-paper-faint">Store Split</h3>
+            <span className="font-mono text-[0.5rem] uppercase tracking-[0.16em] text-paper-faint">
+              {storeTotal > 0 ? `${storeTotal.toLocaleString()} streams` : "real data"}
+            </span>
+          </div>
+          {storeSplit.length > 0 ? (
+            <ul className="space-y-2">
+              {storeSplit.map(([store, n]) => (
+                <li key={store} className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: storeColor(store) }} />
+                    <span className="font-display text-[0.74rem] text-paper truncate">{store}</span>
+                  </div>
+                  <span className="font-mono text-[0.6rem] text-paper-dim tabular-nums shrink-0">
+                    {n.toLocaleString()}
+                    <span className="text-paper-faint text-[0.5rem] ml-0.5">
+                      {storeTotal ? `· ${Math.round((n / storeTotal) * 100)}%` : ""}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="font-mono text-[0.55rem] text-paper-faint leading-relaxed">
+              Per-store numbers appear once DistroKid reports stream data (2–5 days after stores go live).
+            </p>
+          )}
+          <div className="mt-4 pt-3 border-t" style={{ borderColor: "var(--color-rule-soft)" }}>
+            <p className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint mb-2">Generator</p>
+            <ul className="space-y-1.5">
+              <GenRow label="Suno" n={tracks.filter((t) => t.generator === "suno").length} total={tracks.length} color="#ec4899" />
+              <GenRow label="Mureka" n={tracks.filter((t) => t.generator === "mureka").length} total={tracks.length} color="#8b5cf6" />
+              {tracks.filter((t) => t.generator === "import").length > 0 && (
+                <GenRow label="Imported" n={tracks.filter((t) => t.generator === "import").length} total={tracks.length} color="#94a3b8" />
+              )}
+            </ul>
+          </div>
+        </aside>
+      </section>
+
+      {/* Genre distribution (catalog) */}
+      <section className="grid grid-cols-1 gap-3">
+        <div className="rounded-lg border border-brd bg-card p-4">
           <div className="flex items-baseline justify-between mb-3">
             <h3 className="font-mono text-[0.55rem] uppercase tracking-[0.2em] text-paper-faint">Genre Distribution</h3>
             <span className="font-mono text-[0.5rem] uppercase tracking-[0.16em] text-paper-faint">{Object.keys(genreCounts).length} genres</span>
@@ -69,41 +206,57 @@ export default function AnalyticsPage() {
             })}
           </ul>
         </div>
-
-        <aside className="lg:col-span-4 rounded-lg border border-brd bg-card p-4">
-          <div className="flex items-baseline justify-between mb-3">
-            <h3 className="font-mono text-[0.55rem] uppercase tracking-[0.2em] text-paper-faint">Platform Split</h3>
-            <span className="font-mono text-[0.5rem] uppercase tracking-[0.16em] text-paper-faint">${monthlyEst.toFixed(0)}/mo</span>
-          </div>
-          <ul className="space-y-2">
-            {PLATFORMS.map((p) => {
-              const v = monthlyEst * p.share;
-              return (
-                <li key={p.name} className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: p.color }} />
-                    <span className="font-display text-[0.74rem] text-paper truncate">{p.name}</span>
-                  </div>
-                  <span className="font-mono text-[0.6rem] text-paper-dim tabular-nums shrink-0">
-                    ${v.toFixed(2)}<span className="text-paper-faint text-[0.5rem] ml-0.5">/mo</span>
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="mt-4 pt-3 border-t" style={{ borderColor: "var(--color-rule-soft)" }}>
-            <p className="font-mono text-[0.5rem] uppercase tracking-[0.18em] text-paper-faint mb-2">Generator</p>
-            <ul className="space-y-1.5">
-              <GenRow label="Suno" n={tracks.filter((t) => t.generator === "suno").length} total={tracks.length} color="#ec4899" />
-              <GenRow label="Mureka" n={tracks.filter((t) => t.generator === "mureka").length} total={tracks.length} color="#8b5cf6" />
-              {tracks.filter((t) => t.generator === "import").length > 0 && (
-                <GenRow label="Imported" n={tracks.filter((t) => t.generator === "import").length} total={tracks.length} color="#94a3b8" />
-              )}
-            </ul>
-          </div>
-        </aside>
       </section>
     </main>
+  );
+}
+
+function ago(ts: number): string {
+  const m = Math.round((Date.now() - ts) / 60000);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
+
+function fmtDate(ts: number): string {
+  const d = new Date(ts);
+  return `${d.getDate()}/${d.getMonth() + 1}`;
+}
+
+// Dependency-free SVG area chart for the streams time series.
+function Spark({ data, labels }: { data: number[]; labels: string[] }) {
+  const width = 720;
+  const height = 120;
+  const pad = 4;
+  const padBottom = 16;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const w = width - pad * 2;
+  const h = height - pad - padBottom;
+  const xAt = (i: number) => pad + (data.length === 1 ? w / 2 : (i / (data.length - 1)) * w);
+  const yAt = (v: number) => pad + h - ((v - min) / range) * h;
+  const line = data.map((v, i) => `${i === 0 ? "M" : "L"}${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}`).join(" ");
+  const area = `${line} L${xAt(data.length - 1).toFixed(1)},${(pad + h).toFixed(1)} L${xAt(0).toFixed(1)},${(pad + h).toFixed(1)} Z`;
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-[120px]" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill="url(#spark-fill)" />
+      <path d={line} fill="none" stroke="#8b5cf6" strokeWidth="2" />
+      <circle cx={xAt(data.length - 1)} cy={yAt(data[data.length - 1])} r="3" fill="#ec4899" />
+      <text x={pad} y={height - 3} fill="var(--color-paper-faint, #888)" fontSize="9" fontFamily="monospace">
+        {labels[0]}
+      </text>
+      <text x={width - pad} y={height - 3} fill="var(--color-paper-faint, #888)" fontSize="9" fontFamily="monospace" textAnchor="end">
+        {labels[labels.length - 1]} · {data[data.length - 1].toLocaleString()}
+      </text>
+    </svg>
   );
 }
 
