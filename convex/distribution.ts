@@ -21,8 +21,12 @@ export const createSingle = mutation({
 });
 
 export const createAlbum = mutation({
-  args: { albumId: v.id("albums") },
-  handler: async (ctx, { albumId }) => {
+  args: {
+    albumId: v.id("albums"),
+    distributor: v.optional(v.union(v.literal("routenote"), v.literal("distrokid"))),
+  },
+  handler: async (ctx, { albumId, distributor }) => {
+    const dist = distributor ?? "distrokid";
     const album = await ctx.db.get(albumId);
     if (!album) throw new Error("album not found");
     const tracks = await ctx.db
@@ -33,12 +37,15 @@ export const createAlbum = mutation({
       .collect();
     const live = tracks.filter((t) => !t.archivedAt).sort((a, b) => (a.trackNum ?? 0) - (b.trackNum ?? 0));
     if (live.length === 0) throw new Error("album has no tracks");
-    if (live.length > 15) throw new Error(`album has ${live.length} tracks; RouteNote allows max 15`);
+    // RouteNote caps free releases at 15 tracks; DistroKid has no such limit.
+    if (dist === "routenote" && live.length > 15) {
+      throw new Error(`album has ${live.length} tracks; RouteNote allows max 15`);
+    }
     const id = await ctx.db.insert("distributionJobs", {
       trackId: live[0]._id,
       albumId,
       releaseType: "album",
-      distributor: "routenote",
+      distributor: dist,
       status: "pending",
       createdAt: Date.now(),
     });

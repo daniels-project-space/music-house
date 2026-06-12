@@ -26,7 +26,30 @@ export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, s
   const [trackOver, setTrackOver] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [distributing, setDistributing] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+
+  const handleDistribute = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setMenuOpen(false);
+    if (!albumId) return;
+    if (!confirm(`Distribute the whole album "${name}" to DistroKid? This submits a live release.`)) return;
+    setDistributing(true);
+    try {
+      const r = await fetch("/api/distribute/album", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ albumId, distributor: "distrokid" }),
+      });
+      if (!r.ok) alert(`Failed to distribute: ${await r.text()}`);
+      else alert(`"${name}" queued for DistroKid. Track progress on the Distribution page.`);
+    } catch (err) {
+      alert(`Failed: ${(err as Error).message}`);
+    } finally {
+      setDistributing(false);
+    }
+  };
   const href = `/library/${artist}/${slug}`;
 
   useEffect(() => {
@@ -194,6 +217,15 @@ export function AlbumCard({ albumId, artist, slug, name, trackCount, coverKey, s
                   <span className="font-display">Edit</span>
                 </button>
                 <ShareMenuItem artist={artist} slug={slug} name={name} onClick={() => setMenuOpen(false)} />
+                <button
+                  type="button"
+                  disabled={distributing}
+                  onClick={handleDistribute}
+                  className="w-full px-3 py-1.5 text-[0.7rem] text-left flex items-center gap-2.5 text-cyan hover:bg-cyan/[0.08] transition-colors disabled:opacity-40"
+                >
+                  <span className="text-[0.75rem] w-4 text-center">{distributing ? "…" : "↗"}</span>
+                  <span className="font-display">Distribute to DistroKid</span>
+                </button>
                 <div className="my-1 mx-2 h-px bg-brd" />
                 <button
                   type="button"
