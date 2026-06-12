@@ -430,8 +430,8 @@ export function buildDistroAlbumPayload(
     hasSongsMasteredWithMixea: 0,
     ismobileupload: 0,
     // Social "new artist" sentinels (payload-embedded gotchas).
-    spotifyArtistID: "new",
-    appleArtistID: "new",
+    spotifyArtistID: release.artistIdentity?.spotifyArtistId || "new",
+    appleArtistID: release.artistIdentity?.appleArtistId || "new",
     googleArtistID: "new",
     instagramProfileArtistID: "new",
     facebookProfileArtistID: "new",

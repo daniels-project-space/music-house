@@ -52,6 +52,7 @@ export type SunoTrack = {
   title?: string;
   duration?: number;
   modelName?: string;
+  lyrics?: string;            // Suno's returned lyrics (record-info `prompt` field)
 };
 
 export type SunoTaskState =
@@ -79,6 +80,13 @@ export async function getTask(taskId: string): Promise<SunoTaskState> {
         title: t.title ? String(t.title) : undefined,
         duration: typeof t.duration === "number" ? t.duration : undefined,
         modelName: t.modelName ? String(t.modelName) : undefined,
+        // Suno returns the (provided or AI-generated) lyrics in `prompt`; some
+        // API builds use `lyric`/`lyrics`. Blank for instrumentals.
+        lyrics:
+          (t.prompt ? String(t.prompt) : "") ||
+          (t.lyric ? String(t.lyric) : "") ||
+          (t.lyrics ? String(t.lyrics) : "") ||
+          undefined,
       })),
     };
   }

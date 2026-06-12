@@ -151,6 +151,12 @@ export const distributeSingleDistrokid = task({
     };
 
     const artistName = humanizeSlug(track.artistSlug);
+    // Pinned streaming-profile ids (else releases default to "new artist").
+    const artistRec = await cx.query(api.artists.getBySlug, { slug: track.artistSlug });
+    const artistIdentity =
+      artistRec?.spotifyArtistId || artistRec?.appleArtistId
+        ? { spotifyArtistId: artistRec?.spotifyArtistId, appleArtistId: artistRec?.appleArtistId }
+        : undefined;
     // DistroKid requires a real legal name for songwriters, not the artist/stage name.
     // TODO: source this from a tracks/artist schema field per the metadata-source rule.
     const songwriterLegalName = process.env.DISTROKID_SONGWRITER_LEGAL_NAME ?? "Daniel Broj";
@@ -198,6 +204,7 @@ export const distributeSingleDistrokid = task({
       artwork,
       aiDisclosure,
       stores,
+      artistIdentity,
     };
 
     // Pure pre-submit gate — hard-throws on any invalid field. Validation
@@ -248,7 +255,7 @@ export const distributeSingleDistrokid = task({
         audioKeys: result.audioKeys,
         mode: result.mode,
       });
-      return { releaseId, dryRun: true, artworkKey: result.artworkKey, audioKeys: result.audioKeys };
+      return { releaseId, dryRun: true, artworkKey: result.artworkKey, audioKeys: result.audioKeys, pinnedArtist: artistIdentity ?? null };
     }
 
     if (result.upc) {
@@ -258,6 +265,7 @@ export const distributeSingleDistrokid = task({
       id: input.jobId,
       releaseUrl: result.releaseUrl,
     });
+    await cx.mutation(api.artists.markDistrokidReleased, { slug: track.artistSlug });
     logger.info("dist:single:dk:submitted", {
       releaseId,
       upc: result.upc,

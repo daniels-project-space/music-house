@@ -8,6 +8,11 @@ export default defineSchema({
     description: v.optional(v.string()),
     genres: v.array(v.string()),
     coverKey: v.optional(v.string()),
+    // DistroKid artist-identity pinning: when set, releases reuse the existing
+    // streaming profile instead of telling DistroKid "new artist" every time.
+    spotifyArtistId: v.optional(v.string()),
+    appleArtistId: v.optional(v.string()),
+    distrokidReleased: v.optional(v.boolean()),
   }).index("by_slug", ["slug"]),
 
   albums: defineTable({

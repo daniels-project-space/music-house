@@ -97,7 +97,12 @@ export const generateSunoTrack = task({
         generator: "suno",
         audioKey,
         coverKey,
-        lyrics: input.lyrics ? parseLyrics(input.lyrics) : undefined,
+        // Capture whatever lyrics exist at inception: Suno's returned lyrics
+        // (vocal tracks) take precedence over the prompt we sent in.
+        lyrics: (() => {
+          const lyr = t.lyrics ?? input.lyrics;
+          return lyr && lyr.trim().length > 0 ? parseLyrics(lyr) : undefined;
+        })(),
       });
       created.push(id);
     }

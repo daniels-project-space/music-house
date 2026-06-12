@@ -128,6 +128,11 @@ export const distributeAlbumDistrokid = task({
 
     // ----- Per-track audio + metadata --------------------------------------
     const artistName = humanizeSlug(album.artistSlug);
+    const artistRec = await cx.query(api.artists.getBySlug, { slug: album.artistSlug });
+    const artistIdentity =
+      artistRec?.spotifyArtistId || artistRec?.appleArtistId
+        ? { spotifyArtistId: artistRec?.spotifyArtistId, appleArtistId: artistRec?.appleArtistId }
+        : undefined;
     const songwriterLegalName = process.env.DISTROKID_SONGWRITER_LEGAL_NAME ?? "Daniel Broj";
     const language = "en";
 
@@ -181,6 +186,7 @@ export const distributeAlbumDistrokid = task({
       // Album-level AI disclosure is true if ANY track was AI-made.
       aiDisclosure: { usedAi: albumUsedAi, details: albumUsedAi ? "AI-assisted production" : undefined },
       stores,
+      artistIdentity,
     };
 
     try {
@@ -219,11 +225,12 @@ export const distributeAlbumDistrokid = task({
         trackCount: dkTracks.length,
         mode: result.mode,
       });
-      return { releaseId, dryRun: true, trackCount: dkTracks.length, artworkKey: result.artworkKey };
+      return { releaseId, dryRun: true, trackCount: dkTracks.length, artworkKey: result.artworkKey, pinnedArtist: artistIdentity ?? null };
     }
 
     if (result.upc) await cx.mutation(api.distribution.setUpc, { id: input.jobId, upc: result.upc });
     await cx.mutation(api.distribution.setSubmitted, { id: input.jobId, releaseUrl: result.releaseUrl });
+    await cx.mutation(api.artists.markDistrokidReleased, { slug: album.artistSlug });
     logger.info("dist:album:dk:submitted", { releaseId, upc: result.upc, trackCount: dkTracks.length });
 
     return { releaseId, upc: result.upc, releaseUrl: result.releaseUrl, trackCount: dkTracks.length };

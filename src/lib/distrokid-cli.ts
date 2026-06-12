@@ -94,6 +94,9 @@ export type DistrokidReleasePayload = {
   artwork: DistrokidArtwork;
   aiDisclosure?: DistrokidAiDisclosure;
   stores?: DistrokidStoreSelection;
+  /** Pinned streaming-profile ids; when set, the save payload reuses the
+   *  existing artist instead of the "new artist" sentinel. */
+  artistIdentity?: { spotifyArtistId?: string; appleArtistId?: string };
 };
 
 /** Result of a single CLI invocation. */

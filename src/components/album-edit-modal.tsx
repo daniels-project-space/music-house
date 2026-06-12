@@ -25,12 +25,31 @@ function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
 }
 
+// Extract a Spotify artist id from a pasted profile URL / URI, else pass the
+// trimmed input through (already an id). Empty in -> empty out.
+function parseSpotifyArtistId(raw: string): string {
+  const s = raw.trim();
+  if (!s) return "";
+  const url = s.match(/artist[/:]([A-Za-z0-9]{18,})/);
+  if (url) return url[1];
+  return s;
+}
+// Extract an Apple Music artist id (numeric) from a pasted URL, else pass through.
+function parseAppleArtistId(raw: string): string {
+  const s = raw.trim();
+  if (!s) return "";
+  const url = s.match(/(?:id)?(\d{6,})\b/);
+  if (url) return url[1];
+  return s;
+}
+
 export function AlbumEditModal({ open, onClose, albumId }: Props) {
   const album = useQuery(api.albums.list, open ? {} : "skip")?.find((a) => a._id === albumId);
   const allArtists = useQuery(api.artists.list, open ? {} : "skip") ?? [];
   const setMeta = useMutation(api.albums.setMeta);
   const reassignArtist = useMutation(api.albums.reassignArtist);
   const upsertArtist = useMutation(api.artists.upsert);
+  const setStreamingIds = useMutation(api.artists.setStreamingIds);
   const { get } = useUrlCache();
   useResolvedUrls(album?.coverKey ? [album.coverKey] : []);
 
@@ -41,10 +60,19 @@ export function AlbumEditModal({ open, onClose, albumId }: Props) {
   const [artistChoice, setArtistChoice] = useState("");
   const [newArtistName, setNewArtistName] = useState("");
 
+  const [spotifyId, setSpotifyId] = useState("");
+  const [appleId, setAppleId] = useState("");
   const [saving, setSaving] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [coverBumpKey, setCoverBumpKey] = useState(0);
+
+  useEffect(() => {
+    if (!open) return;
+    const a = allArtists.find((x) => x.slug === artistChoice);
+    setSpotifyId((a as { spotifyArtistId?: string } | undefined)?.spotifyArtistId ?? "");
+    setAppleId((a as { appleArtistId?: string } | undefined)?.appleArtistId ?? "");
+  }, [open, artistChoice, allArtists]);
 
   useEffect(() => {
     if (open && album) {
@@ -92,6 +120,15 @@ export function AlbumEditModal({ open, onClose, albumId }: Props) {
 
       if (targetArtist !== album.artistSlug) {
         await reassignArtist({ id: albumId, newArtistSlug: targetArtist });
+      }
+
+      // Pin DistroKid streaming profiles for the (existing) target artist.
+      if (artistChoice !== ADD_NEW_ARTIST) {
+        await setStreamingIds({
+          slug: targetArtist,
+          spotifyArtistId: parseSpotifyArtistId(spotifyId) || undefined,
+          appleArtistId: parseAppleArtistId(appleId) || undefined,
+        });
       }
 
       onClose();
@@ -258,6 +295,36 @@ export function AlbumEditModal({ open, onClose, albumId }: Props) {
                   disabled={saving}
                 />
               </Field>
+              {artistChoice !== ADD_NEW_ARTIST ? (
+                <div className="rounded-md border p-3 flex flex-col gap-2.5" style={{ borderColor: "var(--color-brd)" }}>
+                  <span className="font-mono text-[0.55rem] uppercase tracking-[0.18em] text-cyan">
+                    DistroKid artist profiles
+                    <span className="text-paper-faint/60 normal-case tracking-normal text-[0.6rem] ml-2">
+                      pin releases to an existing artist (leave blank = new)
+                    </span>
+                  </span>
+                  <Field label="Spotify artist URL or ID">
+                    <input
+                      value={spotifyId}
+                      onChange={(e) => setSpotifyId(e.target.value)}
+                      placeholder="https://open.spotify.com/artist/…"
+                      className="w-full px-3 py-2 rounded-md bg-paper/[0.04] border text-paper text-[0.8rem] focus:outline-none focus:border-cyan/50"
+                      style={{ borderColor: "var(--color-brd)" }}
+                      disabled={saving}
+                    />
+                  </Field>
+                  <Field label="Apple Music artist URL or ID">
+                    <input
+                      value={appleId}
+                      onChange={(e) => setAppleId(e.target.value)}
+                      placeholder="https://music.apple.com/…/artist/…/123456789"
+                      className="w-full px-3 py-2 rounded-md bg-paper/[0.04] border text-paper text-[0.8rem] focus:outline-none focus:border-cyan/50"
+                      style={{ borderColor: "var(--color-brd)" }}
+                      disabled={saving}
+                    />
+                  </Field>
+                </div>
+              ) : null}
               {error ? (
                 <div className="font-mono text-[0.7rem] text-red whitespace-pre-wrap">{error}</div>
               ) : null}

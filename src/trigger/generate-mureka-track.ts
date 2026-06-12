@@ -1,4 +1,12 @@
 import { task, logger } from "@trigger.dev/sdk/v3";
+// Parse plain-text lyrics into the structured shape tracks.lyrics expects.
+function parseLyrics(text: string): Array<{ text: string; start: number; isSection: boolean }> {
+  return text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .map((l) => ({ text: l, start: 0, isSection: /^\[.+\]$/.test(l) }));
+}
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -68,6 +76,7 @@ export const generateMurekaTrack = task({
         duration: Math.round((c.duration ?? 0) / 1000),
         generator: "mureka",
         audioKey,
+        lyrics: input.lyrics && input.lyrics.trim().length > 0 ? parseLyrics(input.lyrics) : undefined,
       });
       created.push(id);
     }

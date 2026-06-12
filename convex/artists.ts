@@ -29,3 +29,32 @@ export const upsert = mutation({
     return ctx.db.insert("artists", args);
   },
 });
+
+// Set (or clear) an artist's streaming-profile ids for DistroKid pinning. Empty
+// string clears the field (reverts to "new artist" on the next release).
+export const setStreamingIds = mutation({
+  args: {
+    slug: v.string(),
+    spotifyArtistId: v.optional(v.string()),
+    appleArtistId: v.optional(v.string()),
+  },
+  handler: async (ctx, { slug, spotifyArtistId, appleArtistId }) => {
+    const a = await ctx.db.query("artists").withIndex("by_slug", (q) => q.eq("slug", slug)).first();
+    if (!a) throw new Error(`artist ${slug} not found`);
+    await ctx.db.patch(a._id, {
+      spotifyArtistId: spotifyArtistId ? spotifyArtistId : undefined,
+      appleArtistId: appleArtistId ? appleArtistId : undefined,
+    });
+    return a._id;
+  },
+});
+
+// Flag an artist as having a live DistroKid release (set after a successful
+// submit) so the UI can prompt for streaming-profile ids once stores ingest.
+export const markDistrokidReleased = mutation({
+  args: { slug: v.string() },
+  handler: async (ctx, { slug }) => {
+    const a = await ctx.db.query("artists").withIndex("by_slug", (q) => q.eq("slug", slug)).first();
+    if (a && !a.distrokidReleased) await ctx.db.patch(a._id, { distrokidReleased: true });
+  },
+});
