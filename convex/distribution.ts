@@ -3,12 +3,15 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 
 export const createSingle = mutation({
-  args: { trackId: v.id("tracks") },
-  handler: async (ctx, { trackId }) => {
+  args: {
+    trackId: v.id("tracks"),
+    distributor: v.optional(v.union(v.literal("routenote"), v.literal("distrokid"))),
+  },
+  handler: async (ctx, { trackId, distributor }) => {
     const id = await ctx.db.insert("distributionJobs", {
       trackId,
       releaseType: "single",
-      distributor: "routenote",
+      distributor: distributor ?? "routenote",
       status: "pending",
       createdAt: Date.now(),
     });
@@ -69,6 +72,14 @@ export const setRunning = mutation({
 export const setUpc = mutation({
   args: { id: v.id("distributionJobs"), upc: v.string() },
   handler: async (ctx, { id, upc }) => {
+    const job = await ctx.db.get(id);
+    // RouteNote derives a live edit URL from the UPC. For DistroKid the UPC is
+    // NOT a route key, so don't overwrite the DK release URL that
+    // setSubmitted/setDraftReady already set — just record the UPC.
+    if (job?.distributor === "distrokid") {
+      await ctx.db.patch(id, { upc });
+      return;
+    }
     const liveViewUrl = `https://www.routenote.com/rn/edit_album/${upc}`;
     await ctx.db.patch(id, { upc, liveViewUrl });
   },
@@ -126,6 +137,30 @@ export const setFailed = mutation({
   args: { id: v.id("distributionJobs"), error: v.string() },
   handler: async (ctx, { id, error }) =>
     ctx.db.patch(id, { status: "failed", error, completedAt: Date.now() }),
+});
+
+// Store pasted distributor session cookies (RouteNote or DistroKid) into
+// distributorAuth. Upserts by distributor, mirroring distributorAuth.save.
+export const setDistributorCookies = mutation({
+  args: {
+    distributor: v.union(v.literal("routenote"), v.literal("distrokid")),
+    cookiesJson: v.string(),
+  },
+  handler: async (ctx, { distributor, cookiesJson }) => {
+    const existing = await ctx.db
+      .query("distributorAuth")
+      .withIndex("by_distributor", (q) => q.eq("distributor", distributor))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, { cookiesJson, savedAt: Date.now() });
+      return existing._id;
+    }
+    return ctx.db.insert("distributorAuth", {
+      distributor,
+      cookiesJson,
+      savedAt: Date.now(),
+    });
+  },
 });
 
 export const get = query({

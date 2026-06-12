@@ -10,6 +10,7 @@ export default function DistributionPage() {
   const setDistributed = useMutation(api.tracks.setDistributed);
   const setComplete = useMutation(api.distribution.setComplete);
   const [busy, setBusy] = useState<string | null>(null);
+  const [distributor, setDistributor] = useState<"routenote" | "distrokid">("distrokid");
 
   const jobByTrack = new Map<string, (typeof jobs)[number]>();
   for (const j of jobs) {
@@ -35,7 +36,7 @@ export default function DistributionPage() {
       const r = await fetch("/api/distribute", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ trackId }),
+        body: JSON.stringify({ trackId, distributor }),
       });
       if (!r.ok) alert(`Failed to start: ${await r.text()}`);
     } catch (e) {
@@ -50,17 +51,41 @@ export default function DistributionPage() {
       <div className="flex items-baseline justify-between gap-3 mb-4 pb-3" style={{ borderBottom: "1px solid var(--color-brd)" }}>
         <div className="flex items-baseline gap-3">
           <h1 className="font-display text-[1.05rem] font-bold tracking-tight text-paper">Distribution</h1>
-          <span className="font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint">via RouteNote</span>
+          <span className="font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint">
+            via {distributor === "distrokid" ? "DistroKid" : "RouteNote"}
+          </span>
         </div>
-        <a
-          href="https://www.routenote.com/rn/releases"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="font-mono text-[0.62rem] uppercase tracking-[0.16em] px-3 py-1.5 rounded border text-cyan hover:bg-cyan/[0.06] transition-colors"
-          style={{ borderColor: "rgba(6,182,212,0.4)" }}
-        >
-          Open RouteNote ↗
-        </a>
+        <div className="flex items-center gap-3">
+          <div className="flex rounded border overflow-hidden" style={{ borderColor: "var(--color-brd)" }}>
+            {(["distrokid", "routenote"] as const).map((d) => (
+              <button
+                key={d}
+                onClick={() => setDistributor(d)}
+                className="font-mono text-[0.55rem] uppercase tracking-[0.14em] px-2.5 py-1.5 transition-colors"
+                style={
+                  distributor === d
+                    ? { background: "rgba(6,182,212,0.12)", color: "#06b6d4" }
+                    : { color: "var(--color-paper-faint, #9ca3af)" }
+                }
+              >
+                {d === "distrokid" ? "DistroKid" : "RouteNote"}
+              </button>
+            ))}
+          </div>
+          <a
+            href={
+              distributor === "distrokid"
+                ? "https://distrokid.com/dashboard/albums/"
+                : "https://www.routenote.com/rn/releases"
+            }
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-[0.62rem] uppercase tracking-[0.16em] px-3 py-1.5 rounded border text-cyan hover:bg-cyan/[0.06] transition-colors"
+            style={{ borderColor: "rgba(6,182,212,0.4)" }}
+          >
+            {distributor === "distrokid" ? "Open DistroKid ↗" : "Open RouteNote ↗"}
+          </a>
+        </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <Column color="#34d399" label="Ready">

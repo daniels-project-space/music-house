@@ -1,9 +1,11 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
+const distributorArg = v.union(v.literal("routenote"), v.literal("distrokid"));
+
 export const save = mutation({
   args: {
-    distributor: v.literal("routenote"),
+    distributor: distributorArg,
     cookiesJson: v.string(),
   },
   handler: async (ctx, { distributor, cookiesJson }) => {
@@ -24,7 +26,7 @@ export const save = mutation({
 });
 
 export const get = query({
-  args: { distributor: v.literal("routenote") },
+  args: { distributor: distributorArg },
   handler: async (ctx, { distributor }) =>
     ctx.db
       .query("distributorAuth")
@@ -33,7 +35,7 @@ export const get = query({
 });
 
 export const clear = mutation({
-  args: { distributor: v.literal("routenote") },
+  args: { distributor: distributorArg },
   handler: async (ctx, { distributor }) => {
     const existing = await ctx.db
       .query("distributorAuth")

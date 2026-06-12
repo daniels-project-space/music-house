@@ -44,6 +44,12 @@ export default defineSchema({
     clapBestMatch: v.optional(v.string()),
     notes: v.optional(v.string()),
     rating: v.optional(v.number()),
+    // DistroKid requires AI disclosure for Suno/Mureka tracks.
+    aiDisclosure: v.optional(v.object({
+      isAi: v.boolean(),
+      tools: v.optional(v.array(v.string())),
+    })),
+    isrc: v.optional(v.string()),
     distributed: v.boolean(),
     distributedAt: v.optional(v.number()),
     lastDistributionJobId: v.optional(v.id("distributionJobs")),
@@ -100,7 +106,7 @@ export default defineSchema({
     trackId: v.id("tracks"),
     albumId: v.optional(v.id("albums")),
     releaseType: v.optional(v.union(v.literal("single"), v.literal("album"))),
-    distributor: v.literal("routenote"),
+    distributor: v.union(v.literal("routenote"), v.literal("distrokid")),
     status: v.union(
       v.literal("pending"),
       v.literal("running"),
@@ -114,6 +120,12 @@ export default defineSchema({
     liveViewUrl: v.optional(v.string()),
     releaseUrl: v.optional(v.string()),
     upc: v.optional(v.string()),
+    // DistroKid: AI disclosure + ISRC carried on the job.
+    aiDisclosure: v.optional(v.object({
+      isAi: v.boolean(),
+      tools: v.optional(v.array(v.string())),
+    })),
+    isrc: v.optional(v.string()),
     error: v.optional(v.string()),
     createdAt: v.number(),
     completedAt: v.optional(v.number()),
@@ -124,7 +136,7 @@ export default defineSchema({
     .index("by_trigger_run", ["triggerRunId"]),
 
   distributorAuth: defineTable({
-    distributor: v.literal("routenote"),
+    distributor: v.union(v.literal("routenote"), v.literal("distrokid")),
     cookiesJson: v.string(),
     savedAt: v.number(),
   }).index("by_distributor", ["distributor"]),
