@@ -1,4 +1,4 @@
-import { task, logger } from "@trigger.dev/sdk/v3";
+import { task, logger, AbortTaskRunError } from "@trigger.dev/sdk/v3";
 import { ConvexHttpClient } from "convex/browser";
 import sharp from "sharp";
 import { api } from "../../convex/_generated/api";
@@ -6,7 +6,6 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { getBuffer } from "../lib/storage";
 import { normalizeForRouteNote } from "../lib/audio-normalize";
 import {
-  distrokidSubmitFlow,
   validateBeforeSubmit,
   type CookieEntry,
   type DistrokidArtwork,
@@ -14,6 +13,7 @@ import {
   type DistrokidStoreSelection,
   type DistrokidTrack,
 } from "../lib/distrokid-cli";
+import { runDistrokidRelease } from "../lib/distrokid-native";
 
 function convexClient() {
   const url = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -119,12 +119,31 @@ export const distributeSingleDistrokid = task({
       throw new Error(msg);
     }
     const meta = await sharp(coverBuffer).metadata();
-    const widthPx = meta.width ?? 0;
-    const heightPx = meta.height ?? 0;
+    let widthPx = meta.width ?? 0;
+    let heightPx = meta.height ?? 0;
     const imageFilename = coverKey ? coverKey.split("/").pop() ?? "cover" : "cover";
-    const imageContentType = meta.format === "png" ? "image/png" : "image/jpeg";
+    let imageContentType = meta.format === "png" ? "image/png" : "image/jpeg";
+    let finalCoverBuffer: Buffer = coverBuffer;
+    // DistroKid requires EXACTLY 3000x3000. Square covers at other sizes are
+    // deterministically resampled (lanczos3); non-square artwork is a content
+    // error the pipeline can't fix — abort without retries.
+    if (widthPx !== 3000 || heightPx !== 3000) {
+      if (widthPx !== heightPx || widthPx === 0) {
+        const msg = `cover artwork is ${widthPx}x${heightPx} — must be square to resample to 3000x3000`;
+        await cx.mutation(api.distribution.setFailed, { id: input.jobId, error: msg });
+        throw new AbortTaskRunError(msg);
+      }
+      logger.info("resampling cover to 3000x3000", { from: `${widthPx}x${heightPx}` });
+      finalCoverBuffer = await sharp(coverBuffer)
+        .resize(3000, 3000, { kernel: "lanczos3", fit: "fill" })
+        .jpeg({ quality: 95 })
+        .toBuffer();
+      widthPx = 3000;
+      heightPx = 3000;
+      imageContentType = "image/jpeg";
+    }
     const artwork: DistrokidArtwork = {
-      imageBuffer: coverBuffer,
+      imageBuffer: finalCoverBuffer,
       imageFilename,
       imageContentType,
       widthPx,
@@ -181,76 +200,70 @@ export const distributeSingleDistrokid = task({
       stores,
     };
 
-    // Pure pre-submit gate — hard-throws on any invalid field.
+    // Pure pre-submit gate — hard-throws on any invalid field. Validation
+    // failures are deterministic: abort without retries.
     try {
       validateBeforeSubmit(payload);
     } catch (e) {
       const msg = (e as Error).message;
       await cx.mutation(api.distribution.setFailed, { id: input.jobId, error: msg });
-      throw e;
+      throw new AbortTaskRunError(msg);
     }
 
-    // ----- Run the ordered CLI flow to a draft -----------------------------
-    // Each step funnels through runDistrokidCli, which is INERT today and throws
-    // DISTROKID_CLI_NOT_WIRED. Any failure (including that one) is surfaced via
-    // setFailed before re-throwing.
-    let releaseId: string;
+    // ----- Native Playwright flow (one browser session in this container) ---
+    // Bootstrap /new past Cloudflare, S3-upload artwork + audio, assemble the
+    // verbatim distroAlbumPayload, and (live runs only) fire the single gated
+    // distroAlbumSave POST. dryRun stops after uploads + payload assembly.
+    // Live progress: each native-flow step is mirrored onto the job row so the
+    // dashboard shows more than "agent working" (fire-and-forget — progress
+    // must never fail the flow).
+    const reportProgress = (msg: string) => {
+      cx.mutation(api.distribution.setProgress, {
+        id: input.jobId,
+        progress: msg.slice(0, 200),
+      }).catch(() => {});
+    };
+    let result;
     try {
-      const created = await distrokidSubmitFlow.createRelease(payload, cookies);
-      releaseId = created.stdout.trim();
-      await distrokidSubmitFlow.releaseInfo(releaseId, payload, cookies);
-      await distrokidSubmitFlow.uploadAudio(releaseId, dkTrack, cookies);
-      await distrokidSubmitFlow.uploadArtwork(releaseId, artwork, cookies);
-      await distrokidSubmitFlow.trackMetadata(releaseId, dkTrack, cookies);
-      await distrokidSubmitFlow.setAiDisclosure(releaseId, aiDisclosure, cookies);
-      await distrokidSubmitFlow.selectStores(releaseId, stores, cookies);
-      await distrokidSubmitFlow.saveDraft(releaseId, cookies);
+      result = await runDistrokidRelease(payload, cookies, {
+        dryRun: input.dryRun ?? false,
+        log: (msg) => {
+          logger.info("dk:native: " + msg);
+          reportProgress(msg);
+        },
+      });
     } catch (e) {
       const msg = (e as Error).message;
       await cx.mutation(api.distribution.setFailed, { id: input.jobId, error: msg });
-      logger.error("dist:single:dk:draft_failed", { error: msg });
+      logger.error("dist:single:dk:flow_failed", { error: msg });
       throw e;
     }
+    const releaseId = result.albumuuid;
 
-    await cx.mutation(api.distribution.setDraftReady, { id: input.jobId });
-    logger.info("dist:single:dk:draft_ready", { releaseId });
-
-    if (input.dryRun) {
-      logger.info("dist:single:dk:dryRun stop — draft ready on DistroKid, NOT submitted");
-      return { releaseId, dryRun: true };
+    if (!result.submitted) {
+      await cx.mutation(api.distribution.setDraftReady, { id: input.jobId });
+      logger.info("dist:single:dk:dryRun stop — uploads + payload done, NOT submitted", {
+        releaseId,
+        artworkKey: result.artworkKey,
+        audioKeys: result.audioKeys,
+        mode: result.mode,
+      });
+      return { releaseId, dryRun: true, artworkKey: result.artworkKey, audioKeys: result.audioKeys };
     }
 
-    // ----- AUTO-SUBMIT ------------------------------------------------------
-    let submitResult;
-    try {
-      submitResult = await distrokidSubmitFlow.submit(releaseId, cookies);
-    } catch (e) {
-      const msg = (e as Error).message;
-      await cx.mutation(api.distribution.setFailed, { id: input.jobId, error: msg });
-      logger.error("dist:single:dk:submit_failed", { error: msg });
-      throw e;
+    if (result.upc) {
+      await cx.mutation(api.distribution.setUpc, { id: input.jobId, upc: result.upc });
     }
+    await cx.mutation(api.distribution.setSubmitted, {
+      id: input.jobId,
+      releaseUrl: result.releaseUrl,
+    });
+    logger.info("dist:single:dk:submitted", {
+      releaseId,
+      upc: result.upc,
+      releaseUrl: result.releaseUrl,
+    });
 
-    // The submit step's stdout carries the result; parse defensively.
-    let upc: string | undefined;
-    let releaseUrl: string | undefined;
-    try {
-      const parsed = JSON.parse(submitResult.stdout) as {
-        upc?: string;
-        releaseId?: string;
-        url?: string;
-      };
-      upc = parsed.upc;
-      releaseUrl = parsed.url;
-      if (parsed.releaseId) releaseId = parsed.releaseId;
-    } catch {
-      // Non-JSON stdout — leave upc/url undefined, keep releaseId.
-    }
-
-    if (upc) await cx.mutation(api.distribution.setUpc, { id: input.jobId, upc });
-    await cx.mutation(api.distribution.setSubmitted, { id: input.jobId, releaseUrl });
-    logger.info("dist:single:dk:submitted", { releaseId, upc, releaseUrl });
-
-    return { releaseId, upc, releaseUrl };
+    return { releaseId, upc: result.upc, releaseUrl: result.releaseUrl };
   },
 });
