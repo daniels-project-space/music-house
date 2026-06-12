@@ -16,9 +16,10 @@ export default defineConfig({
   build: {
     external: ["playwright-core", "playwright"],
     extensions: [
-      // Bundle chromium. The Trigger build extension's setup script auto-installs the
-      // headless-shell variant when headless: true is set, no need to list it explicitly.
-      playwright({ browsers: ["chromium"], headless: true }),
+      // headless: false installs FULL chromium + headless-shell + Xvfb and sets
+      // DISPLAY=:99 in the image — needed for the DistroKid headed path (Cloudflare).
+      // Existing headless tasks are unaffected (shell still installed).
+      playwright({ browsers: ["chromium"], headless: false }),
       ffmpeg(),
       additionalPackages({ packages: ["curl"] }),
     ],
