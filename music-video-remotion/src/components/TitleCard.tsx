@@ -87,7 +87,7 @@ export const TitleCard: React.FC<TitleCardProps> = ({
             fontWeight: 900,
             color: "#ffffff",
             letterSpacing: "0.04em",
-            textShadow: `0 4px 32px rgba(0,0,0,0.9), 0 0 60px ${accentColor}44`,
+            textShadow: `0 4px 8px rgba(0,0,0,0.9), 0 0 8px ${accentColor}44`,
             textAlign: "center",
             lineHeight: 1.05,
           }}
@@ -102,7 +102,7 @@ export const TitleCard: React.FC<TitleCardProps> = ({
             color: accentColor,
             letterSpacing: "0.25em",
             textTransform: "uppercase",
-            textShadow: `0 2px 16px rgba(0,0,0,0.9)`,
+            textShadow: `0 2px 6px rgba(0,0,0,0.9)`,
             transform: `translateY(${artistSlide}px)`,
           }}
         >

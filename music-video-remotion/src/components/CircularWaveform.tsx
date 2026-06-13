@@ -22,7 +22,7 @@ export const CircularWaveform: React.FC<CircularWaveformProps> = ({
   cy,
   innerRadius,
   maxBarHeight,
-  numBars = 96,
+  numBars = 56,
 }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();

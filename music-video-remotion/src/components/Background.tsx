@@ -15,28 +15,26 @@ function seededRand(seed: number): () => number {
   };
 }
 
+// Hoisted to module level: positions/sizes are constant, only accentColor varies per render
+// accentColor is passed in at render time for hue; shape data is stable
+const _rand = seededRand(42);
+const ORB_BASE = Array.from({ length: 4 }, () => ({
+  xFrac: _rand(),
+  yFrac: _rand(),
+  r: 180 + _rand() * 220,
+  speed: 0.003 + _rand() * 0.004,
+  phase: _rand() * Math.PI * 2,
+  isAccent: _rand() > 0.5,
+  opacity: 0.18 + _rand() * 0.12,
+}));
+
 export const Background: React.FC<BackgroundProps> = ({ accentColor, bgSrc }) => {
   const frame = useCurrentFrame();
   const { width, height } = useVideoConfig();
 
-  // Film grain seed per frame
-  const grainSeed = frame * 1234567;
-
-  // Bokeh orbs: 4 slow-breathing blobs
-  const rand = seededRand(42);
-  const orbs = Array.from({ length: 4 }, (_, i) => ({
-    x: rand() * width,
-    y: rand() * height,
-    r: 180 + rand() * 220,
-    speed: 0.003 + rand() * 0.004,
-    phase: rand() * Math.PI * 2,
-    hue: i % 2 === 0 ? accentColor : "#4B3FA8",
-    opacity: 0.07 + rand() * 0.06,
-  }));
-
   return (
     <AbsoluteFill style={{ background: "#000" }}>
-      {/* Optional bg image */}
+      {/* Optional bg image — no blur, just darken with overlay */}
       {bgSrc && (
         <AbsoluteFill>
           <Img
@@ -45,10 +43,11 @@ export const Background: React.FC<BackgroundProps> = ({ accentColor, bgSrc }) =>
               width: "100%",
               height: "100%",
               objectFit: "cover",
-              filter: "blur(18px) brightness(0.25)",
-              transform: "scale(1.08)",
+              opacity: 0.18,
             }}
           />
+          {/* Dark overlay to keep bg very subtle */}
+          <AbsoluteFill style={{ background: "rgba(0,0,0,0.72)" }} />
         </AbsoluteFill>
       )}
 
@@ -59,50 +58,42 @@ export const Background: React.FC<BackgroundProps> = ({ accentColor, bgSrc }) =>
         }}
       />
 
-      {/* Bokeh orbs */}
-      <AbsoluteFill style={{ overflow: "hidden" }}>
-        <svg width={width} height={height} style={{ position: "absolute" }}>
-          {orbs.map((orb, i) => {
-            const breathe = Math.sin(frame * orb.speed + orb.phase);
-            const cx = orb.x + breathe * 30;
-            const cy = orb.y + Math.cos(frame * orb.speed * 0.7 + orb.phase) * 20;
-            const scale = 1 + breathe * 0.15;
-            return (
-              <ellipse
-                key={i}
-                cx={cx}
-                cy={cy}
-                rx={orb.r * scale}
-                ry={orb.r * 0.85 * scale}
-                fill={orb.hue}
-                opacity={orb.opacity + breathe * 0.02}
-                style={{ filter: "blur(60px)", mixBlendMode: "screen" }}
-              />
-            );
-          })}
-        </svg>
-      </AbsoluteFill>
-
-      {/* Film grain overlay via SVG feTurbulence */}
-      <AbsoluteFill style={{ pointerEvents: "none" }}>
-        <svg width={width} height={height} style={{ position: "absolute", opacity: 0.045 }}>
-          <filter id={`grain-${frame % 4}`}>
-            <feTurbulence
-              type="fractalNoise"
-              baseFrequency="0.85"
-              numOctaves="4"
-              seed={grainSeed % 999}
-              stitchTiles="stitch"
-            />
-            <feColorMatrix type="saturate" values="0" />
-          </filter>
-          <rect
-            width="100%"
-            height="100%"
-            filter={`url(#grain-${frame % 4})`}
+      {/* Bokeh orbs — CSS radial-gradient divs, NO blur filter, NO mixBlendMode */}
+      {ORB_BASE.map((orb, i) => {
+        const breathe = Math.sin(frame * orb.speed + orb.phase);
+        const cx = orb.xFrac * width + breathe * 30;
+        const cy = orb.yFrac * height + Math.cos(frame * orb.speed * 0.7 + orb.phase) * 20;
+        const scale = 1 + breathe * 0.15;
+        const rx = orb.r * scale;
+        const ry = orb.r * 0.85 * scale;
+        const color = i % 2 === 0 ? accentColor : "#4B3FA8";
+        const op = orb.opacity + breathe * 0.02;
+        return (
+          <div
+            key={i}
+            style={{
+              position: "absolute",
+              left: cx - rx,
+              top: cy - ry,
+              width: rx * 2,
+              height: ry * 2,
+              borderRadius: "50%",
+              background: `radial-gradient(circle, ${color}${Math.round(op * 255).toString(16).padStart(2, "0")} 0%, transparent 70%)`,
+              opacity: 1,
+              pointerEvents: "none",
+            }}
           />
-        </svg>
-      </AbsoluteFill>
+        );
+      })}
+
+      {/* Film grain removed (feTurbulence per-frame too costly for software raster).
+          Replaced with zero-cost static dark vignette overlay. */}
+      <AbsoluteFill
+        style={{
+          pointerEvents: "none",
+          background: "radial-gradient(ellipse 100% 100% at 50% 50%, transparent 55%, rgba(0,0,0,0.35) 100%)",
+        }}
+      />
     </AbsoluteFill>
   );
 };

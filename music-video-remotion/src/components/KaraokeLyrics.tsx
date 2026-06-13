@@ -122,7 +122,7 @@ export const KaraokeLyrics: React.FC<KaraokeLyricsProps> = ({
               opacity = 1;
               color = accentColor;
               fontWeight = 700;
-              textShadow = `0 0 30px ${accentColor}99, 0 0 60px ${accentColor}55, 0 2px 8px rgba(0,0,0,0.8)`;
+              textShadow = `0 0 8px ${accentColor}99, 0 2px 4px rgba(0,0,0,0.8)`;
             } else if (Math.abs(diff) === 1) {
               fontSize = NEIGHBOR_SIZE;
               opacity = 0.65;

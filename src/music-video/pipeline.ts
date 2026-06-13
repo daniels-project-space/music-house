@@ -201,9 +201,11 @@ export async function runMusicVideoJob(opts: RunOptions): Promise<RunResult> {
       chromiumOptions: { gl: "swangle", disableWebSecurity: true },
       onProgress: ({ progress }) => {
         const pct = Math.round(progress * 100);
-        if (pct >= lastPct + 10) {
+        if (pct >= lastPct + 5) {
           lastPct = pct;
           log(`render ${pct}%`);
+          // Surface real % to Convex so the /videos dashboard shows live progress.
+          void mark({ progress: `rendering ${pct}%` });
         }
       },
     });
