@@ -8,7 +8,7 @@ import { Background } from "./components/Background";
 import { VinylDisc } from "./components/VinylDisc";
 import { CircularWaveform } from "./components/CircularWaveform";
 import { AlbumCover } from "./components/AlbumCover";
-import { KaraokeLyrics } from "./components/KaraokeLyrics";
+import { CaptionLyrics } from "./components/CaptionLyrics";
 import { TitleCard } from "./components/TitleCard";
 
 // Load fonts at module level (Remotion requirement)
@@ -19,23 +19,22 @@ const { fontFamily: antonFont } = loadAnton();
 const COMP_W = 1920;
 const COMP_H = 1080;
 
-// Cluster center: slightly left of middle, a bit above center
-const CLUSTER_CX = COMP_W * 0.46;
-const CLUSTER_CY = COMP_H * 0.44;
+// Album cluster: left side, center x ~32%, y ~45%
+const COVER_CX = COMP_W * 0.32;    // 614px
+const COVER_CY = COMP_H * 0.45;    // 486px
 
-const COVER_SIZE = 520;       // album cover side length
-const DISC_SIZE = 560;        // vinyl disc diameter
+const COVER_SIZE = 460;            // album cover square
+const DISC_SIZE = 640;             // vinyl disc — bigger, pokes right
 
-// Disc center: shifted right so ~45% of disc pokes out from cover right edge
-// Cover right edge = CLUSTER_CX + COVER_SIZE/2 = CLUSTER_CX + 260
-// Disc needs ~55% hidden behind cover, 45% visible right
-// So disc center = cover right edge - 0.55 * disc_radius = cover right edge - 0.55 * 280 = cover right edge - 154
-const DISC_CX = CLUSTER_CX + COVER_SIZE / 2 - DISC_SIZE * 0.05;
-const DISC_CY = CLUSTER_CY;
+// Disc center: offset RIGHT so ~55% of disc sticks out past cover right edge
+// Cover right edge = COVER_CX + COVER_SIZE/2 = 614 + 230 = 844
+// Disc center x = cover right edge - 0.45 * disc_radius = 844 - 0.45*320 = 844 - 144 = 700
+const DISC_CX = COVER_CX + COVER_SIZE / 2 - DISC_SIZE * 0.225;
+const DISC_CY = COVER_CY;
 
-// Waveform: inner radius = just outside cover edge + small gap
-const WAVEFORM_INNER_RADIUS = COVER_SIZE / 2 + 18; // 278
-const WAVEFORM_MAX_BAR = 55;
+// Waveform: bold halo ring around the cluster, centered on cover
+const WAVEFORM_INNER_RADIUS = COVER_SIZE / 2 + 24;  // 254
+const WAVEFORM_MAX_BAR = 110;                        // much taller bars
 
 export const VinylMusicVideo: React.FC<VinylMusicVideoProps> = (props) => {
   const {
@@ -46,6 +45,7 @@ export const VinylMusicVideo: React.FC<VinylMusicVideoProps> = (props) => {
     bgSrc,
     lyrics,
     accentColor,
+    waveform,
   } = props;
 
   return (
@@ -53,38 +53,39 @@ export const VinylMusicVideo: React.FC<VinylMusicVideoProps> = (props) => {
       {/* Audio track */}
       <Audio src={audioSrc} />
 
-      {/* Layer 0: Background (black + glow + bokeh + grain) */}
+      {/* Layer 0: Rich animated background */}
       <Background accentColor={accentColor} bgSrc={bgSrc} />
 
-      {/* Layer 1: Vinyl disc (behind cover, zIndex 1) */}
+      {/* Layer 1: Vinyl disc BEHIND cover — larger, offset right */}
       <VinylDisc
         accentColor={accentColor}
+        coverSrc={coverSrc}
         cx={DISC_CX}
         cy={DISC_CY}
         size={DISC_SIZE}
       />
 
-      {/* Layer 2: Circular waveform ring (zIndex 3, centered on cluster) */}
+      {/* Layer 2: Bold circular waveform halo around cover */}
       <CircularWaveform
-        audioSrc={audioSrc}
+        waveform={waveform}
         accentColor={accentColor}
-        cx={CLUSTER_CX}
-        cy={CLUSTER_CY}
+        cx={COVER_CX}
+        cy={COVER_CY}
         innerRadius={WAVEFORM_INNER_RADIUS}
         maxBarHeight={WAVEFORM_MAX_BAR}
-        numBars={96}
+        numBars={68}
       />
 
-      {/* Layer 3: Album cover (zIndex 4) */}
+      {/* Layer 3: Album cover — left side, z above disc */}
       <AlbumCover
         coverSrc={coverSrc}
-        cx={CLUSTER_CX}
-        cy={CLUSTER_CY}
+        cx={COVER_CX}
+        cy={COVER_CY}
         size={COVER_SIZE}
       />
 
-      {/* Layer 4: Karaoke lyrics lower third (zIndex 6) */}
-      <KaraokeLyrics
+      {/* Layer 4: Caption lyrics — lower right, prominent */}
+      <CaptionLyrics
         lyrics={lyrics}
         accentColor={accentColor}
         fontFamily={poppinsFont}

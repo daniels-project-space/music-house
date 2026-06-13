@@ -15,4 +15,10 @@ export type VinylMusicVideoProps = {
   accentColor: string;    // e.g. "#E8B84B"
   fps: number;
   durationInFrames: number;
+  /**
+   * Pre-computed per-frame loudness envelope, length == durationInFrames.
+   * Values 0..1. Generated outside Remotion (e.g. ffmpeg/essentia) so the
+   * browser does zero audio decoding during render.
+   */
+  waveform: number[];
 };

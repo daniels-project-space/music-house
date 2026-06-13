@@ -1,13 +1,13 @@
 /**
  * Forced lyric alignment for the Music Video pipeline.
  *
- * Music House stores lyric TEXT (from Suno/Mureka) but the per-line timestamps
- * are unreliable (often all 0). To make karaoke lyrics that actually track the
- * music, we transcribe the real audio with Groq's whisper-large-v3 (word-level
- * timestamps) and align the KNOWN good lyric lines onto that timeline.
+ * Music House stores lyric TEXT (Suno/Mureka) but the per-line timestamps are
+ * unreliable. We transcribe the real audio with Groq whisper-large-v3 (word
+ * timestamps) and align the KNOWN good lyric lines onto that timeline with a
+ * word-level two-pointer match, then interpolate any gaps. Output drives the
+ * synced captions in the composition.
  *
- * Graceful degradation: if transcription fails or matches poorly, we fall back
- * to even spacing across the track duration so the render never breaks.
+ * Falls back to even spacing if transcription fails or matches too poorly.
  */
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
@@ -19,8 +19,7 @@ export type TimedLine = { text: string; start: number; end: number; isSection?: 
 export type AlignResult = {
   lines: TimedLine[];
   method: "forced" | "even";
-  /** 0..1 — fraction of lyric lines that matched a transcribed word. */
-  confidence: number;
+  confidence: number; // 0..1 fraction of known words matched
 };
 
 const GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
@@ -33,6 +32,33 @@ function tokenize(s: string): string[] {
     .replace(/[^a-z0-9\s']/g, " ")
     .split(/\s+/)
     .filter(Boolean);
+}
+
+function wordMatch(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  // Shared 3-char prefix tolerates ASR mishears / inflections on sung vocals.
+  if (a.length >= 3 && b.length >= 3 && a.slice(0, 3) === b.slice(0, 3)) return true;
+  return false;
+}
+
+/**
+ * Strip the metadata preamble Suno/Mureka embed in lyric text (title, "by X",
+ * "Album: …", separator rules, stray bracketed labels) so only real lyric lines
+ * get captioned. Section markers (isSection) are kept for structure.
+ */
+export function cleanLyricLines(lines: LyricLineInput[], title?: string): LyricLineInput[] {
+  const titleNorm = (title ?? "").toLowerCase().trim();
+  return lines.filter((l) => {
+    if (l.isSection) return true;
+    const t = (l.text ?? "").trim();
+    if (!t) return false;
+    if (/^[\s=\-_*~.•]+$/.test(t)) return false; // separator rules
+    if (/^(by|album|artist|title|written by|produced by|feat\.?|prod\.?)\b\s*:?/i.test(t)) return false;
+    if (/^\[[^\]]*\]$/.test(t)) return false; // stray [bracketed] labels not flagged as sections
+    if (titleNorm && t.toLowerCase() === titleNorm) return false;
+    return true;
+  });
 }
 
 async function groqKey(explicit?: string): Promise<string> {
@@ -51,7 +77,6 @@ async function transcribeWords(audioPath: string, apiKey: string): Promise<GroqW
   form.append("model", "whisper-large-v3");
   form.append("response_format", "verbose_json");
   form.append("timestamp_granularities[]", "word");
-  // Hint the model this is lyrical/musical content.
   form.append("prompt", "Song lyrics.");
 
   const r = await fetch(GROQ_URL, {
@@ -65,29 +90,28 @@ async function transcribeWords(audioPath: string, apiKey: string): Promise<GroqW
   return words.filter((w) => typeof w.start === "number");
 }
 
-/** Even-spacing fallback: distribute lyric lines proportionally to their word count. */
+/** Even-spacing fallback weighted by each line's word count. */
 function evenSpacing(lines: LyricLineInput[], durationSec: number): TimedLine[] {
-  const lyricLines = lines.filter((l) => !l.isSection);
-  const weights = lyricLines.map((l) => Math.max(1, tokenize(l.text).length));
+  const lyric = lines.filter((l) => !l.isSection);
+  const weights = lyric.map((l) => Math.max(1, tokenize(l.text).length));
   const total = weights.reduce((a, b) => a + b, 0) || 1;
   let t = 0;
   const startByRef = new Map<LyricLineInput, number>();
-  lyricLines.forEach((l, i) => {
+  lyric.forEach((l, i) => {
     startByRef.set(l, t);
     t += (weights[i] / total) * durationSec;
   });
   return toTimed(lines, startByRef, durationSec);
 }
 
-/** Build final TimedLine[] from a per-line start map, fixing monotonicity + ends. */
+/** Build final TimedLine[] from a per-line start map, enforcing monotonic
+ *  starts and computing ends from the next line. Section markers inherit the
+ *  start of the following lyric line. */
 function toTimed(
   lines: LyricLineInput[],
   startByRef: Map<LyricLineInput, number>,
   durationSec: number,
 ): TimedLine[] {
-  // Resolve starts for lyric lines, then attach section markers to the next lyric line.
-  const out: TimedLine[] = [];
-  // First pass: ordered starts for lyric lines.
   let lastStart = 0;
   const resolved = lines.map((l) => {
     if (l.isSection) return { line: l, start: NaN };
@@ -97,23 +121,17 @@ function toTimed(
     lastStart = s;
     return { line: l, start: s };
   });
-  // Section markers inherit the start of the following lyric line.
   for (let i = 0; i < resolved.length; i++) {
     if (resolved[i].line.isSection) {
       const next = resolved.slice(i + 1).find((r) => !r.line.isSection);
       resolved[i].start = next ? next.start : lastStart;
     }
   }
-  // Ends = next entry's start (or duration).
+  const out: TimedLine[] = [];
   for (let i = 0; i < resolved.length; i++) {
     const start = Math.min(resolved[i].start, durationSec);
     const end = i + 1 < resolved.length ? Math.min(resolved[i + 1].start, durationSec) : durationSec;
-    out.push({
-      text: resolved[i].line.text,
-      start,
-      end: Math.max(end, start + 0.4),
-      isSection: resolved[i].line.isSection,
-    });
+    out.push({ text: resolved[i].line.text, start, end: Math.max(end, start + 0.4), isSection: resolved[i].line.isSection });
   }
   return out;
 }
@@ -129,48 +147,65 @@ export async function alignLyrics(opts: {
 
   let words: GroqWord[] = [];
   try {
-    const key = await groqKey(opts.apiKey);
-    words = await transcribeWords(audioPath, key);
+    words = await transcribeWords(audioPath, await groqKey(opts.apiKey));
   } catch {
     return { lines: evenSpacing(lines, durationSec), method: "even", confidence: 0 };
   }
-  if (words.length < 8) {
-    return { lines: evenSpacing(lines, durationSec), method: "even", confidence: 0 };
-  }
+  if (words.length < 8) return { lines: evenSpacing(lines, durationSec), method: "even", confidence: 0 };
 
-  const gw = words.map((w) => ({ w: tokenize(w.word)[0] ?? "", start: w.start }));
-  const startByRef = new Map<LyricLineInput, number>();
-  const lyricLines = lines.filter((l) => !l.isSection);
+  const gw = words.map((w) => ({ w: tokenize(w.word)[0] ?? "", start: w.start })).filter((x) => x.w);
 
-  let cursor = 0;
+  const lyric = lines.filter((l) => !l.isSection);
+  // Flatten known lyric words, each tagged with its line.
+  const known: Array<{ line: LyricLineInput; w: string }> = [];
+  for (const line of lyric) for (const w of tokenize(line.text)) known.push({ line, w });
+
+  // Two-pointer alignment: walk known words, find each in the ASR stream within
+  // a forward window. First matched word of a line anchors that line's start.
+  const WINDOW = 24;
+  let gi = 0;
   let matched = 0;
-  const WINDOW = 40; // how far ahead to search for a line's opening word
-  for (const line of lyricLines) {
-    const toks = tokenize(line.text);
-    if (!toks.length) {
-      startByRef.set(line, cursor < gw.length ? gw[cursor].start : durationSec);
-      continue;
-    }
-    const head = toks[0];
+  const lineStart = new Map<LyricLineInput, number>();
+  for (const k of known) {
     let found = -1;
-    for (let i = cursor; i < Math.min(gw.length, cursor + WINDOW); i++) {
-      if (gw[i].w === head || (head.length > 3 && gw[i].w.startsWith(head.slice(0, 4)))) {
-        found = i;
+    for (let j = gi; j < Math.min(gw.length, gi + WINDOW); j++) {
+      if (wordMatch(k.w, gw[j].w)) {
+        found = j;
         break;
       }
     }
     if (found >= 0) {
-      startByRef.set(line, gw[found].start);
-      cursor = found + Math.max(1, Math.floor(toks.length * 0.7));
+      gi = found + 1;
       matched++;
-    } else {
-      // leave unset → toTimed will clamp it to the previous start
+      if (!lineStart.has(k.line)) lineStart.set(k.line, gw[found].start);
     }
   }
 
-  const confidence = lyricLines.length ? matched / lyricLines.length : 0;
-  if (confidence < 0.25) {
+  const confidence = known.length ? matched / known.length : 0;
+  if (lineStart.size < Math.max(2, Math.ceil(lyric.length * 0.25))) {
     return { lines: evenSpacing(lines, durationSec), method: "even", confidence };
   }
+
+  // Interpolate starts for lyric lines that got no anchor, between neighbours.
+  const startByRef = new Map<LyricLineInput, number>();
+  const anchored = lyric.map((l) => ({ l, t: lineStart.get(l) }));
+  // leading gap → from 0; trailing gap → toward duration
+  for (let i = 0; i < anchored.length; i++) {
+    if (anchored[i].t != null) {
+      startByRef.set(anchored[i].l, anchored[i].t as number);
+      continue;
+    }
+    // find prev + next anchored
+    let p = i - 1;
+    while (p >= 0 && anchored[p].t == null) p--;
+    let n = i + 1;
+    while (n < anchored.length && anchored[n].t == null) n++;
+    const prevT = p >= 0 ? (anchored[p].t as number) : 0;
+    const nextT = n < anchored.length ? (anchored[n].t as number) : durationSec;
+    const span = n - p; // number of steps
+    const frac = (i - p) / span;
+    startByRef.set(anchored[i].l, prevT + (nextT - prevT) * frac);
+  }
+
   return { lines: toTimed(lines, startByRef, durationSec), method: "forced", confidence };
 }

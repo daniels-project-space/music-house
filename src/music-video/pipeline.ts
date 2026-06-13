@@ -22,7 +22,7 @@ import { ConvexHttpClient } from "convex/browser";
 import { ensureBrowser, renderMedia, selectComposition } from "@remotion/renderer";
 import { api } from "../../convex/_generated/api";
 import { downloadToFile, getBuffer, presignDownload, put } from "./r2";
-import { alignLyrics, type LyricLineInput, type TimedLine } from "./lyrics-align";
+import { alignLyrics, cleanLyricLines, type LyricLineInput, type TimedLine } from "./lyrics-align";
 import { probeDurationSec } from "./ffprobe";
 import { extractWaveformEnvelope } from "./waveform";
 import { resolveLinks, type ResolvedLinks } from "./links";
@@ -147,10 +147,10 @@ export async function prepareRender(
   const durationInFrames = Math.round(durationSec * FPS);
 
   await mark({ progress: "aligning lyrics" });
-  const lyricInput: LyricLineInput[] = (track.lyrics ?? []).map((l: any) => ({
-    text: l.text,
-    isSection: l.isSection,
-  }));
+  const lyricInput: LyricLineInput[] = cleanLyricLines(
+    (track.lyrics ?? []).map((l: any) => ({ text: l.text, isSection: l.isSection })),
+    track.title,
+  );
   const aligned = await alignLyrics({ audioPath, lines: lyricInput, durationSec });
   log(`Lyric alignment: ${aligned.method} (${aligned.confidence.toFixed(2)})`);
 

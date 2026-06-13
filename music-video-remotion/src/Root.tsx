@@ -12,6 +12,7 @@ const SAMPLE: VinylMusicVideoProps = {
   accentColor: "#E8B84B",
   fps: 30,
   durationInFrames: 1800,
+  waveform: Array.from({ length: 1800 }, (_, i) => 0.45 + 0.4 * Math.abs(Math.sin(i / 7))),
   lyrics: [
     { text: "Verse 1", start: 3, end: 5, isSection: true },
     { text: "In the late-night hours I find my way", start: 5, end: 9 },
