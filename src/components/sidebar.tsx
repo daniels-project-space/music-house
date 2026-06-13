@@ -11,6 +11,7 @@ const TABS: Array<{ slug: string; label: string; href: string }> = [
   { slug: "studio", label: "Studio", href: "/studio" },
   { slug: "analytics", label: "Analytics", href: "/analytics" },
   { slug: "distribution", label: "Distribution", href: "/distribution" },
+  { slug: "videos", label: "Music Videos", href: "/videos" },
   { slug: "archive", label: "Archive", href: "/archive" },
 ];
 

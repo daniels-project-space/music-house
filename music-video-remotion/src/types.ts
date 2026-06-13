@@ -1,0 +1,18 @@
+export type TimedLine = {
+  text: string;
+  start: number; // seconds
+  end: number;   // seconds
+  isSection?: boolean;
+};
+
+export type VinylMusicVideoProps = {
+  title: string;
+  artist: string;
+  coverSrc: string;       // absolute HTTPS URL, e.g. presigned R2 link
+  audioSrc: string;       // absolute HTTPS URL, e.g. presigned R2 link
+  bgSrc?: string;         // optional background image (absolute HTTPS URL)
+  lyrics: TimedLine[];
+  accentColor: string;    // e.g. "#E8B84B"
+  fps: number;
+  durationInFrames: number;
+};

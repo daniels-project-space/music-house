@@ -1,6 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
+import { scheduleMusicVideoForTrack } from "./musicVideo";
 
 export const createSingle = mutation({
   args: {
@@ -132,7 +133,16 @@ export const setSubmitted = mutation({
         }
       }
     } else {
-      await ctx.db.patch(job.trackId, { distributed: true, distributedAt: Date.now() });
+      const distributedAt = Date.now();
+      await ctx.db.patch(job.trackId, { distributed: true, distributedAt });
+      // Standalone Music Video pipeline: schedule the YouTube video for +5 days
+      // (lets streaming stores propagate before we resolve "listen everywhere"
+      // links). Idempotent; failure here must never break distribution.
+      try {
+        await scheduleMusicVideoForTrack(ctx, job.trackId, distributedAt);
+      } catch {
+        /* non-fatal */
+      }
     }
   },
 });

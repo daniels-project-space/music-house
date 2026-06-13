@@ -182,4 +182,42 @@ export default defineSchema({
     lyrics: v.string(),
     createdAt: v.number(),
   }).index("by_created", ["createdAt"]),
+
+  // ── Music Video pipeline (standalone) ──────────────────────────────────
+  // One job per released single. Created at release time (+5d fireAt), swept
+  // daily by the musicVideo:fireDueJobs cron. NOT part of the distribution flow.
+  musicVideoJobs: defineTable({
+    trackId: v.id("tracks"),
+    artistSlug: v.optional(v.string()),
+    albumSlug: v.optional(v.string()),
+    status: v.union(
+      v.literal("scheduled"), // waiting for fireAt
+      v.literal("rendering"), // resolve links → align → render
+      v.literal("rendered"), // mp4 in R2, awaiting upload (gated)
+      v.literal("uploading"),
+      v.literal("published"), // live on YouTube
+      v.literal("held"), // rendered but no channel connected yet
+      v.literal("failed"),
+    ),
+    fireAt: v.number(), // distributedAt + 5 days
+    triggerRunId: v.optional(v.string()),
+    videoKey: v.optional(v.string()), // R2 key of rendered mp4
+    previewUrl: v.optional(v.string()), // presigned R2 url for review
+    youtubeVideoId: v.optional(v.string()),
+    youtubeUrl: v.optional(v.string()),
+    linksJson: v.optional(v.string()), // ResolvedLinks JSON
+    timedLyricsJson: v.optional(v.string()), // aligned TimedLine[] JSON
+    alignMethod: v.optional(v.string()), // "forced" | "even"
+    progress: v.optional(v.string()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_track", ["trackId"])
+    .index("by_status", ["status"])
+    .index("by_status_fireAt", ["status", "fireAt"])
+    .index("by_trigger_run", ["triggerRunId"]),
+  // NOTE: the channel binding (refresh token) intentionally lives in env/vault
+  // as YOUTUBE_REFRESH_TOKEN_MUSIC_HOUSE_RECORDS, never in a public Convex row.
+  // Uploads are gated on that key existing.
 });

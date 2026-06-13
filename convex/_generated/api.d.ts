@@ -16,6 +16,7 @@ import type * as distributorAuth from "../distributorAuth.js";
 import type * as hearts from "../hearts.js";
 import type * as http from "../http.js";
 import type * as jobs from "../jobs.js";
+import type * as musicVideo from "../musicVideo.js";
 import type * as playlists from "../playlists.js";
 import type * as savedLyrics from "../savedLyrics.js";
 import type * as tracks from "../tracks.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   hearts: typeof hearts;
   http: typeof http;
   jobs: typeof jobs;
+  musicVideo: typeof musicVideo;
   playlists: typeof playlists;
   savedLyrics: typeof savedLyrics;
   tracks: typeof tracks;

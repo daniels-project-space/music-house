@@ -1,0 +1,25 @@
+{
+  "name": "music-video-remotion",
+  "version": "1.0.0",
+  "description": "Dark Vinyl Studio music video — Remotion v4",
+  "main": "src/index.ts",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render"
+  },
+  "dependencies": {
+    "remotion": "4.0.441",
+    "@remotion/cli": "4.0.441",
+    "@remotion/bundler": "4.0.441",
+    "@remotion/renderer": "4.0.441",
+    "@remotion/media-utils": "4.0.441",
+    "@remotion/google-fonts": "4.0.441",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "@types/react": "^18",
+    "@types/react-dom": "^18"
+  }
+}
