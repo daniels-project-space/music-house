@@ -151,6 +151,15 @@ export default defineSchema({
     savedAt: v.number(),
   }).index("by_distributor", ["distributor"]),
 
+  // YouTube channel OAuth tokens (one row per upload channel).
+  youtubeChannels: defineTable({
+    key: v.string(), // channel slug, e.g. "music-house-records"
+    channelId: v.optional(v.string()),
+    channelTitle: v.optional(v.string()),
+    refreshToken: v.string(),
+    connectedAt: v.number(),
+  }).index("by_key", ["key"]),
+
   // Latest analytics snapshot per distributor (streams + bank balance),
   // written by the distrokid-analytics Trigger task (upsert, one row each).
   distributorAnalytics: defineTable({

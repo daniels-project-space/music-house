@@ -20,6 +20,7 @@ import type * as musicVideo from "../musicVideo.js";
 import type * as playlists from "../playlists.js";
 import type * as savedLyrics from "../savedLyrics.js";
 import type * as tracks from "../tracks.js";
+import type * as youtubeChannels from "../youtubeChannels.js";
 
 import type {
   ApiFromModules,
@@ -40,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   playlists: typeof playlists;
   savedLyrics: typeof savedLyrics;
   tracks: typeof tracks;
+  youtubeChannels: typeof youtubeChannels;
 }>;
 
 /**

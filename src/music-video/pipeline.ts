@@ -134,9 +134,18 @@ function resolveServeUrl(): string {
   );
 }
 
-async function mhrRefreshToken(): Promise<string | undefined> {
+async function mhrRefreshToken(convex: ConvexHttpClient): Promise<string | undefined> {
   if (process.env.YOUTUBE_REFRESH_TOKEN_MUSIC_HOUSE_RECORDS)
     return process.env.YOUTUBE_REFRESH_TOKEN_MUSIC_HOUSE_RECORDS;
+  // Canonical store: the /api/youtube/connect flow writes the token here.
+  try {
+    const tok = (await convex.query(api.youtubeChannels.getToken, {
+      key: "music-house-records",
+    })) as string | null;
+    if (tok) return tok;
+  } catch {
+    // fall through to vault
+  }
   try {
     const { getServiceSecrets } = await import("./vault");
     return (await getServiceSecrets("youtube")).YOUTUBE_REFRESH_TOKEN_MUSIC_HOUSE_RECORDS;
@@ -418,7 +427,7 @@ export async function uploadAndFinalize(
 
   const result: RunResult = { jobId, videoKey, previewUrl, held: true, alignMethod: ctx.alignMethod };
   if (opts.doUpload) {
-    const refreshToken = await mhrRefreshToken();
+    const refreshToken = await mhrRefreshToken(convex);
     if (!refreshToken) {
       await mark({ status: "held", progress: "rendered; channel not connected" });
       log("Upload skipped: Music House Records channel not connected.");
