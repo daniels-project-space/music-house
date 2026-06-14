@@ -127,6 +127,7 @@ export const listJobs = query({
           artist: artist?.name ?? track?.artistSlug ?? "",
           videoKey: r.videoKey ?? null,
           previewUrl: r.previewUrl ?? null,
+          karaokePreviewUrl: r.karaokePreviewUrl ?? null,
           youtubeUrl: r.youtubeUrl ?? null,
           alignMethod: r.alignMethod ?? null,
           fireAt: r.fireAt,
@@ -175,6 +176,7 @@ export const getRenderInputs = query({
         title: track.title,
         genre: track.genre ?? album?.genre ?? null,
         audioKey: track.audioKey,
+        instrumentalKey: track.instrumentalKey ?? null,
         coverKey,
         durationSec: track.duration ?? null,
         isrc: track.isrc ?? null,
@@ -193,6 +195,15 @@ export const setTrackIsrc = mutation({
   args: { trackId: v.id("tracks"), isrc: v.string() },
   handler: async (ctx, { trackId, isrc }) => {
     await ctx.db.patch(trackId, { isrc });
+    return { ok: true };
+  },
+});
+
+/** Cache a track's vocals-removed instrumental stem key (karaoke). */
+export const setInstrumentalKey = mutation({
+  args: { trackId: v.id("tracks"), instrumentalKey: v.string() },
+  handler: async (ctx, { trackId, instrumentalKey }) => {
+    await ctx.db.patch(trackId, { instrumentalKey });
     return { ok: true };
   },
 });
@@ -217,6 +228,8 @@ export const markStatus = mutation({
     triggerRunId: v.optional(v.string()),
     videoKey: v.optional(v.string()),
     previewUrl: v.optional(v.string()),
+    karaokeVideoKey: v.optional(v.string()),
+    karaokePreviewUrl: v.optional(v.string()),
     youtubeVideoId: v.optional(v.string()),
     youtubeUrl: v.optional(v.string()),
     linksJson: v.optional(v.string()),

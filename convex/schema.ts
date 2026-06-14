@@ -39,6 +39,7 @@ export default defineSchema({
     generator: v.union(v.literal("suno"), v.literal("mureka"), v.literal("import")),
     audioKey: v.string(),
     flacKey: v.optional(v.string()),
+    instrumentalKey: v.optional(v.string()), // cached vocals-removed stem (karaoke)
     coverKey: v.optional(v.string()),
     lyrics: v.optional(v.array(v.object({
       text: v.string(),
@@ -203,6 +204,8 @@ export default defineSchema({
     triggerRunId: v.optional(v.string()),
     videoKey: v.optional(v.string()), // R2 key of rendered mp4
     previewUrl: v.optional(v.string()), // presigned R2 url for review
+    karaokeVideoKey: v.optional(v.string()),
+    karaokePreviewUrl: v.optional(v.string()),
     youtubeVideoId: v.optional(v.string()),
     youtubeUrl: v.optional(v.string()),
     linksJson: v.optional(v.string()), // ResolvedLinks JSON

@@ -28,6 +28,7 @@ export type MusicVideoRenderPayload = {
   doUpload?: boolean;
   privacy?: "private" | "unlisted" | "public";
   chunks?: number;
+  variant?: "main" | "karaoke";
 };
 
 export const musicVideoRender = task({
@@ -42,7 +43,7 @@ export const musicVideoRender = task({
     const convex = convexClient(payload.convexUrl);
     const mark = marker(convex, payload.jobId);
 
-    const ctx = await prepareRender(convex, payload.jobId, log);
+    const ctx = await prepareRender(convex, payload.jobId, log, payload.variant ?? "main");
     const stitchDir = path.join(os.tmpdir(), `mv-stitch-${payload.jobId}`);
 
     try {
@@ -64,7 +65,7 @@ export const musicVideoRender = task({
           chunkIndex: r.index,
           frameStart: r.start,
           frameEnd: r.end,
-          partialKey: `music-video/tmp/${payload.jobId}/chunk-${String(r.index).padStart(3, "0")}.mp4`,
+          partialKey: `music-video/tmp/${payload.jobId}/${payload.variant ?? "main"}-chunk-${String(r.index).padStart(3, "0")}.mp4`,
           props: ctx.props,
         },
       }));

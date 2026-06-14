@@ -29,6 +29,7 @@ import { resolveLinks, type ResolvedLinks } from "./links";
 import { generateBackgroundPlate } from "./nano-banana";
 import { buildDescription, buildTitle, buildYouTubeTags } from "./tags";
 import { setVideoThumbnail, uploadVideo } from "./youtube";
+import { ensureInstrumental } from "./stems";
 
 const FPS = 30;
 const ACCENT_DEFAULT = "#E8B84B";
@@ -45,6 +46,7 @@ export type MvProps = {
   fps: number;
   durationInFrames: number;
   waveform: number[];
+  karaoke?: boolean;
 };
 
 export type RenderMeta = {
@@ -56,6 +58,7 @@ export type RenderMeta = {
   isrc: string | null;
   isAi: boolean;
   coverKey: string;
+  variant: "main" | "karaoke";
 };
 
 export type RenderContext = {
@@ -118,6 +121,7 @@ export async function prepareRender(
   convex: ConvexHttpClient,
   jobId: string,
   log: (m: string) => void,
+  variant: "main" | "karaoke" = "main",
 ): Promise<RenderContext> {
   const mark = marker(convex, jobId);
   await mark({ status: "rendering", progress: "loading inputs" });
@@ -125,21 +129,21 @@ export async function prepareRender(
   const inputs = (await convex.query(api.musicVideo.getRenderInputs, { jobId: jobId as any })) as any;
   if (!inputs) throw new Error(`No render inputs for job ${jobId}`);
   const { track, artistName, albumName } = inputs;
-  log(`Preparing "${track.title}" — ${artistName}`);
+  log(`Preparing "${track.title}" — ${artistName}${variant === "karaoke" ? " [karaoke]" : ""}`);
 
-  const workDir = path.join(os.tmpdir(), `mv-${jobId}`);
+  const workDir = path.join(os.tmpdir(), `mv-${jobId}-${variant}`);
   await mkdir(workDir, { recursive: true });
-  const audioPath = path.join(workDir, "audio.mp3");
 
+  // Vocal mix: needed for lyric alignment (and is the default playback audio).
   await mark({ progress: "downloading audio" });
   if (!track.coverKey) throw new Error("Track has no cover art (track/album/artist coverKey empty)");
-  await downloadToFile(track.audioKey, audioPath);
+  const vocalPath = path.join(workDir, "vocal.mp3");
+  await downloadToFile(track.audioKey, vocalPath);
   const coverUrl = await presignDownload(track.coverKey, 6 * 3600);
-  const audioUrl = await presignDownload(track.audioKey, 6 * 3600);
 
   let durationSec = track.durationSec ?? 0;
   try {
-    durationSec = await probeDurationSec(audioPath);
+    durationSec = await probeDurationSec(vocalPath);
   } catch {
     log(`ffprobe failed, using stored duration ${durationSec}s`);
   }
@@ -151,11 +155,35 @@ export async function prepareRender(
     (track.lyrics ?? []).map((l: any) => ({ text: l.text, isSection: l.isSection })),
     track.title,
   );
-  const aligned = await alignLyrics({ audioPath, lines: lyricInput, durationSec });
+  const aligned = await alignLyrics({ audioPath: vocalPath, lines: lyricInput, durationSec });
   log(`Lyric alignment: ${aligned.method} (${aligned.confidence.toFixed(2)})`);
 
   await mark({ progress: "resolving streaming links" });
   const links = await resolveLinks({ isrc: track.isrc, artist: artistName, title: track.title });
+
+  // Playback audio: karaoke uses the vocals-removed instrumental (Demucs).
+  let audioPath = vocalPath;
+  let audioSrc: string;
+  if (variant === "karaoke") {
+    await mark({ progress: "separating vocals (demucs)" });
+    const instKey = await ensureInstrumental(
+      track.audioKey,
+      track.instrumentalKey,
+      `music-video/stems/${inputs.track.id}`,
+      log,
+    );
+    if (instKey !== track.instrumentalKey) {
+      await convex.mutation(api.musicVideo.setInstrumentalKey, {
+        trackId: inputs.track.id,
+        instrumentalKey: instKey,
+      });
+    }
+    audioPath = path.join(workDir, "instrumental.mp3");
+    await downloadToFile(instKey, audioPath);
+    audioSrc = await presignDownload(instKey, 6 * 3600);
+  } else {
+    audioSrc = await presignDownload(track.audioKey, 6 * 3600);
+  }
 
   let bgSrc: string | undefined;
   try {
@@ -179,13 +207,14 @@ export async function prepareRender(
     title: track.title,
     artist: artistName,
     coverSrc: coverUrl,
-    audioSrc: audioUrl,
+    audioSrc,
     bgSrc,
     lyrics: aligned.lines,
     accentColor: ACCENT_DEFAULT,
     fps: FPS,
     durationInFrames,
     waveform,
+    karaoke: variant === "karaoke",
   };
 
   return {
@@ -197,13 +226,14 @@ export async function prepareRender(
     links,
     meta: {
       trackId: inputs.track.id,
-      title: track.title,
+      title: variant === "karaoke" ? `${track.title} (Karaoke)` : track.title,
       artistName,
       albumName: albumName ?? null,
       genre: track.genre ?? null,
       isrc: track.isrc ?? null,
       isAi: !!track.isAi,
       coverKey: track.coverKey,
+      variant,
     },
   };
 }
@@ -297,20 +327,27 @@ export async function uploadAndFinalize(
 ): Promise<RunResult> {
   const mark = marker(convex, jobId);
   const { meta, links } = ctx;
+  const isKaraoke = meta.variant === "karaoke";
   await mark({ progress: "uploading to R2" });
   const slug = meta.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  const videoKey = `music-video/${meta.trackId}/${slug || "video"}.mp4`;
+  const videoKey = isKaraoke
+    ? `music-video/${meta.trackId}/karaoke.mp4`
+    : `music-video/${meta.trackId}/${slug || "video"}.mp4`;
   await put(videoKey, await readFile(finalPath), "video/mp4");
   const previewUrl = await presignDownload(videoKey, 7 * 24 * 3600);
 
-  await mark({
-    status: "rendered",
-    progress: "rendered",
-    videoKey,
-    previewUrl,
-    linksJson: JSON.stringify(links),
-    alignMethod: ctx.alignMethod,
-  });
+  await mark(
+    isKaraoke
+      ? { status: "rendered", progress: "karaoke rendered", karaokeVideoKey: videoKey, karaokePreviewUrl: previewUrl }
+      : {
+          status: "rendered",
+          progress: "rendered",
+          videoKey,
+          previewUrl,
+          linksJson: JSON.stringify(links),
+          alignMethod: ctx.alignMethod,
+        },
+  );
   log(`Rendered → ${videoKey}`);
 
   const result: RunResult = { jobId, videoKey, previewUrl, held: true, alignMethod: ctx.alignMethod };
@@ -360,12 +397,13 @@ export async function runMusicVideoJob(opts: {
   convexUrl?: string;
   doUpload?: boolean;
   privacy?: "private" | "unlisted" | "public";
+  variant?: "main" | "karaoke";
   log?: (m: string) => void;
 }): Promise<RunResult> {
   const log = opts.log ?? (() => {});
   const convex = convexClient(opts.convexUrl);
   const mark = marker(convex, opts.jobId);
-  const ctx = await prepareRender(convex, opts.jobId, log);
+  const ctx = await prepareRender(convex, opts.jobId, log, opts.variant ?? "main");
   const out = path.join(os.tmpdir(), `mv-${opts.jobId}.mp4`);
   try {
     await mark({ progress: "rendering video" });

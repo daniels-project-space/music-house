@@ -46,6 +46,7 @@ export const VinylMusicVideo: React.FC<VinylMusicVideoProps> = (props) => {
     lyrics,
     accentColor,
     waveform,
+    karaoke,
   } = props;
 
   const frame = useCurrentFrame();
@@ -183,6 +184,30 @@ export const VinylMusicVideo: React.FC<VinylMusicVideoProps> = (props) => {
       >
         Music House Records
       </div>
+
+      {/* KARAOKE badge (instrumental / sing-along cut) */}
+      {karaoke && (
+        <div
+          style={{
+            position: "absolute",
+            top: 40,
+            right: 56,
+            fontFamily: antonFont,
+            fontSize: 22,
+            letterSpacing: "0.3em",
+            color: accentColor,
+            border: `2px solid ${accentColor}`,
+            padding: "6px 16px",
+            borderRadius: 6,
+            opacity: 0.9,
+            zIndex: 7,
+            textTransform: "uppercase",
+            pointerEvents: "none",
+          }}
+        >
+          Karaoke
+        </div>
+      )}
 
       {/* Layer 6: Intro title card (fades out after ~3s) */}
       <TitleCard

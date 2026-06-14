@@ -23,4 +23,6 @@ export type VinylMusicVideoProps = {
    * browser does zero audio decoding during render.
    */
   waveform: number[];
+  /** When true, show a small KARAOKE badge (instrumental / sing-along cut). */
+  karaoke?: boolean;
 };

@@ -31,6 +31,7 @@ import { arg, convexUrl, loadEnvLocal } from "./_env";
     convexUrl: url,
     doUpload: arg("upload") === "true",
     privacy: (arg("privacy") as "private" | "unlisted" | "public") ?? "unlisted",
+    variant: (arg("variant") as "main" | "karaoke") ?? "main",
   });
 
   console.log("Triggered cloud render:");
