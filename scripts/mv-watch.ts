@@ -22,7 +22,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
       console.log(new Date().toISOString().slice(11, 19), line);
       prev = line;
     }
-    if (j?.previewUrl) {
+    if (["rendered", "held", "published"].includes(j?.status) && j?.previewUrl) {
       console.log("PREVIEW_URL=" + j.previewUrl);
       process.exit(0);
     }

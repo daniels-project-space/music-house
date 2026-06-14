@@ -58,7 +58,18 @@ export const scheduleForTrack = mutation({
     const now = Date.now();
     const targetFire = fireNow ? now : fireAt ?? now + FIVE_DAYS_MS;
     if (existing) {
-      await ctx.db.patch(existing._id, { status: "scheduled", fireAt: targetFire, updatedAt: now, error: undefined });
+      // Clear stale outputs so the dashboard/watcher don't show the prior render.
+      await ctx.db.patch(existing._id, {
+        status: "scheduled",
+        fireAt: targetFire,
+        updatedAt: now,
+        error: undefined,
+        progress: undefined,
+        previewUrl: undefined,
+        videoKey: undefined,
+        youtubeUrl: undefined,
+        youtubeVideoId: undefined,
+      });
       return existing._id;
     }
     const track = await ctx.db.get(trackId);

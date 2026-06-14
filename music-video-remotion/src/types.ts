@@ -3,6 +3,8 @@ export type TimedLine = {
   start: number; // seconds
   end: number;   // seconds
   isSection?: boolean;
+  /** Per-word timings. Each entry's start is in SECONDS. */
+  words?: { text: string; start: number }[];
 };
 
 export type VinylMusicVideoProps = {
