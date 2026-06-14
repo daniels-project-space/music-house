@@ -21,6 +21,7 @@ import {
   uploadAndFinalize,
 } from "../music-video/pipeline";
 import { downloadToFile } from "../music-video/r2";
+import { NoStemSourceError } from "../music-video/stems";
 import { musicVideoChunk } from "./music-video-chunk";
 
 export type MusicVideoRenderPayload = {
@@ -61,7 +62,17 @@ export const musicVideoRender = task({
     const convex = convexClient(payload.convexUrl);
     const mark = marker(convex, payload.jobId, payload.variant ?? "main");
 
-    const ctx = await prepareRender(convex, payload.jobId, log, payload.variant ?? "main");
+    let ctx!: Awaited<ReturnType<typeof prepareRender>>;
+    try {
+      ctx = await prepareRender(convex, payload.jobId, log, payload.variant ?? "main");
+    } catch (e) {
+      if (payload.variant === "karaoke" && e instanceof NoStemSourceError) {
+        await mark({ status: "aborted", progress: `karaoke skipped: ${(e as Error).message}` });
+        log(`karaoke aborted: ${(e as Error).message}`);
+        return { aborted: true, variant: "karaoke", reason: (e as Error).message };
+      }
+      throw e;
+    }
     const stitchDir = path.join(os.tmpdir(), `mv-stitch-${payload.jobId}`);
 
     const preview = payload.preview === true;

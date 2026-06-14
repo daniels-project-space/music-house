@@ -14,6 +14,11 @@ type Job = {
   videoKey: string | null;
   previewUrl: string | null;
   youtubeUrl: string | null;
+  karaokeVideoKey: string | null;
+  karaokePreviewUrl: string | null;
+  karaokeStatus: string | null;
+  karaokeProgress: string | null;
+  karaokeYoutubeUrl: string | null;
   alignMethod: string | null;
   fireAt: number;
   createdAt: number;
@@ -111,6 +116,27 @@ export default function VideosPage() {
               <VideoPlayer videoKey={j.videoKey} fallback={j.previewUrl} />
             )}
 
+            {j.karaokeVideoKey && (
+              <div className="mt-3">
+                <div className="font-mono text-[0.55rem] uppercase tracking-[0.16em] text-paper-faint mb-1">
+                  Karaoke cut{j.karaokeStatus ? ` · ${j.karaokeStatus}` : ""}
+                </div>
+                <VideoPlayer videoKey={j.karaokeVideoKey} fallback={j.karaokePreviewUrl} />
+              </div>
+            )}
+            {!j.karaokeVideoKey && j.karaokeStatus === "aborted" && (
+              <div className="mt-2 font-mono text-[0.6rem] text-paper-dim">
+                ⊘ karaoke skipped — no stem source for this track
+              </div>
+            )}
+            {!j.karaokeVideoKey &&
+              j.karaokeStatus &&
+              !["aborted", "published", "rendered", "held"].includes(j.karaokeStatus) && (
+                <div className="mt-2 font-mono text-[0.62rem] text-cyan">
+                  ▸ karaoke: {j.karaokeProgress ?? j.karaokeStatus}
+                </div>
+              )}
+
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[0.55rem] text-paper-faint">
               <span>updated {fmt(j.updatedAt)}</span>
               {j.alignMethod && <span>lyrics: {j.alignMethod}</span>}
@@ -127,6 +153,21 @@ export default function VideosPage() {
                   className="text-purple underline"
                 >
                   open / download
+                </a>
+              )}
+              {j.karaokeYoutubeUrl && (
+                <a href={j.karaokeYoutubeUrl} target="_blank" rel="noreferrer" className="text-pink underline">
+                  YouTube (karaoke)
+                </a>
+              )}
+              {j.karaokeVideoKey && (
+                <a
+                  href={`/api/video?key=${encodeURIComponent(j.karaokeVideoKey)}&redirect=1`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-purple underline"
+                >
+                  karaoke file
                 </a>
               )}
             </div>

@@ -29,7 +29,7 @@ import { resolveLinks, type ResolvedLinks } from "./links";
 import { generateBackgroundPlate } from "./nano-banana";
 import { buildDescription, buildTitle, buildYouTubeTags } from "./tags";
 import { setVideoThumbnail, uploadVideo } from "./youtube";
-import { ensureInstrumental } from "./stems";
+import { ensureInstrumental, findSunoIdsForTrack } from "./stems";
 
 const FPS = 30;
 const ACCENT_DEFAULT = "#E8B84B";
@@ -206,9 +206,26 @@ export async function prepareRender(
   if (variant === "karaoke") {
     await mark({ progress: "separating stems (suno native)" });
     const destKey = `music-video/stems/${inputs.track.id}-suno-instrumental.mp3`;
+    let sunoTaskId = (track.sunoTaskId ?? null) as string | null;
+    let sunoAudioId = (track.sunoAudioId ?? null) as string | null;
+    // No stored IDs (e.g. generated before IDs were persisted)? Search the
+    // account by title before aborting; persist what we find.
+    if ((!sunoTaskId || !sunoAudioId) && track.instrumentalKey !== destKey) {
+      log("karaoke: no Suno IDs on track — searching the account by title…");
+      const found = await findSunoIdsForTrack(convex, { title: track.title, durationSec }, log);
+      if (found) {
+        sunoTaskId = found.sunoTaskId;
+        sunoAudioId = found.sunoAudioId;
+        await convex.mutation(api.musicVideo.setSunoIds, {
+          trackId: inputs.track.id,
+          sunoTaskId,
+          sunoAudioId,
+        });
+      }
+    }
     const instKey = await ensureInstrumental({
-      sunoTaskId: track.sunoTaskId,
-      sunoAudioId: track.sunoAudioId,
+      sunoTaskId,
+      sunoAudioId,
       cachedKey: track.instrumentalKey,
       destKey,
       log,
