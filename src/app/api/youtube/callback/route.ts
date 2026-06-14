@@ -1,6 +1,6 @@
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../convex/_generated/api";
-import { exchangeCode, getAccessToken, getChannelMine } from "../../../../music-video/youtube";
+import { exchangeCode, getChannelMine } from "../../../../music-video/youtube";
 
 export const runtime = "nodejs";
 
