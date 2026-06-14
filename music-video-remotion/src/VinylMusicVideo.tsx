@@ -20,7 +20,7 @@ const COMP_W = 1920;
 const COMP_H = 1080;
 
 // Album cluster: left side, center x ~32%, y ~45%
-const COVER_CX = COMP_W * 0.32;    // 614px
+const COVER_CX = COMP_W * 0.25;    // further left (480px)
 const COVER_CY = COMP_H * 0.45;    // 486px
 
 const COVER_SIZE = 460;            // album cover square

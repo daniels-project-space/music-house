@@ -9,16 +9,16 @@ interface CaptionLyricsProps {
 }
 
 // Caption area: right 55% of frame, lower third
-const CAPTION_LEFT_FRAC = 0.43;  // starts at 43% from left → right of album
+const CAPTION_LEFT_FRAC = 0.27;  // pulled toward centre (album sits further left now)
 const CAPTION_BOTTOM   = 180;    // px from bottom of frame
-const CAPTION_MAX_W    = 980;    // max caption width in px
+const CAPTION_MAX_W    = 1120;   // max caption width in px
 
 const FADE_IN_FRAMES  = 8;
 const FADE_OUT_FRAMES = 6;
 
 // Words light a hair before their onset so the glow lands right as the word is
 // sung (whisper onsets sit slightly late); a quick pop keeps it crisp/tight.
-const LEAD_SEC = 0.08;
+const LEAD_SEC = 0.04;
 const POP_DURATION = 4; // frames for the pop to settle (snappier than before)
 
 export const CaptionLyrics: React.FC<CaptionLyricsProps> = ({
@@ -205,7 +205,7 @@ export const CaptionLyrics: React.FC<CaptionLyricsProps> = ({
         }}
       >
         {hasWords ? (
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", justifyContent: "center" }}>
             {renderWords()}
           </div>
         ) : (
@@ -260,6 +260,7 @@ export const CaptionLyrics: React.FC<CaptionLyricsProps> = ({
         width: captionW,
         zIndex: 6,
         pointerEvents: "none",
+        textAlign: "center",
       }}
     >
       {/* Section label — small dim pill above caption */}

@@ -155,7 +155,7 @@ export async function prepareRender(
   log(`Lyric alignment: ${aligned.method} (${aligned.confidence.toFixed(2)})`);
 
   await mark({ progress: "resolving streaming links" });
-  const links = await resolveLinks({ isrc: track.isrc });
+  const links = await resolveLinks({ isrc: track.isrc, artist: artistName, title: track.title });
 
   let bgSrc: string | undefined;
   try {

@@ -107,13 +107,55 @@ export async function resolveByISRC(
   return { universal: null, byPlatform: {}, entityUniqueId: null };
 }
 
-/** Convenience: resolve from a seed URL if available, else from ISRC. */
+function hasPlatforms(r: ResolvedLinks): boolean {
+  return Object.keys(r.byPlatform).length > 0;
+}
+
+/** Find an Apple Music URL via the public iTunes Search API (no auth) — a
+ *  robust fallback seed when ISRC lookup misses. */
+async function seedFromITunes(artist: string, title: string): Promise<string | null> {
+  try {
+    const term = encodeURIComponent(`${artist} ${title}`);
+    const r = await fetch(`https://itunes.apple.com/search?term=${term}&entity=song&limit=8`, {
+      headers: { accept: "application/json" },
+    });
+    if (!r.ok) return null;
+    const j = (await r.json()) as { results?: Array<{ trackName?: string; trackViewUrl?: string; collectionViewUrl?: string }> };
+    const tnorm = title.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const hit =
+      (j.results ?? []).find((x) => (x.trackName ?? "").toLowerCase().replace(/[^a-z0-9]/g, "").includes(tnorm)) ??
+      (j.results ?? [])[0];
+    return hit?.trackViewUrl ?? hit?.collectionViewUrl ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Robustly resolve all-platform links, trying several seed routes in order and
+ * returning the first that yields real platform links. Always works as long as
+ * the song is indexed on at least one of: a known store URL, Deezer (by ISRC),
+ * or Apple Music (by artist+title search).
+ */
 export async function resolveLinks(
-  input: { isrc?: string | null; seedUrl?: string | null },
+  input: { isrc?: string | null; seedUrl?: string | null; artist?: string | null; title?: string | null },
   opts: { userCountry?: string } = {},
 ): Promise<ResolvedLinks> {
-  if (input.seedUrl) return resolveStreamingLinks(input.seedUrl, opts);
-  if (input.isrc) return resolveByISRC(input.isrc, opts);
+  if (input.seedUrl) {
+    const r = await resolveStreamingLinks(input.seedUrl, opts);
+    if (hasPlatforms(r)) return r;
+  }
+  if (input.isrc) {
+    const r = await resolveByISRC(input.isrc, opts);
+    if (hasPlatforms(r)) return r;
+  }
+  if (input.artist && input.title) {
+    const apple = await seedFromITunes(input.artist, input.title);
+    if (apple) {
+      const r = await resolveStreamingLinks(apple, opts);
+      if (hasPlatforms(r)) return r;
+    }
+  }
   return { universal: null, byPlatform: {}, entityUniqueId: null };
 }
 
