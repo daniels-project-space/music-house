@@ -1,5 +1,5 @@
 import React from "react";
-import { useCurrentFrame, useVideoConfig, interpolate, spring } from "remotion";
+import { useCurrentFrame, useVideoConfig, interpolate } from "remotion";
 import type { TimedLine } from "../types";
 
 interface CaptionLyricsProps {
@@ -16,8 +16,10 @@ const CAPTION_MAX_W    = 980;    // max caption width in px
 const FADE_IN_FRAMES  = 8;
 const FADE_OUT_FRAMES = 6;
 
-// Spring pop: word lights at frame W, scale goes 1→~1.09→1.0 over ~7 frames
-const POP_DURATION = 7; // frames for spring to settle
+// Words light a hair before their onset so the glow lands right as the word is
+// sung (whisper onsets sit slightly late); a quick pop keeps it crisp/tight.
+const LEAD_SEC = 0.08;
+const POP_DURATION = 4; // frames for the pop to settle (snappier than before)
 
 export const CaptionLyrics: React.FC<CaptionLyricsProps> = ({
   lyrics,
@@ -88,30 +90,16 @@ export const CaptionLyrics: React.FC<CaptionLyricsProps> = ({
     const renderWords = () => {
       if (!line.words) return null;
       return line.words.map((word, wi) => {
-        const wordLitFrame = word.start * fps;
+        const wordLitFrame = (word.start - LEAD_SEC) * fps;
         const isLit = frame >= wordLitFrame;
-
-        // Spring pop: starts at the frame word becomes lit
-        // frame relative to when word lit
         const framesAfterLit = Math.max(0, frame - wordLitFrame);
-        const popScale = isLit
-          ? spring({
-              fps,
-              frame: framesAfterLit,
-              config: { damping: 10, stiffness: 200, mass: 0.6 },
-              from: 1.0,
-              to: 1.0,
-              // We want a momentary overshoot: drive from 1.09→1.0
-              // Trick: use durationInFrames to clamp; overshoot comes from spring physics
-            })
-          : 1.0;
 
-        // Manual overshoot pop: interpolate scale 1→1.09 at frame 0→2, then spring back
+        // Tight, snappy pop: quick overshoot to ~1.10 then settle by POP_DURATION
         const popScaleFinal = isLit
           ? (() => {
               const pf = Math.min(framesAfterLit, POP_DURATION);
-              if (pf < 2) return 1 + (pf / 2) * 0.09;
-              return 1 + interpolate(pf, [2, POP_DURATION], [0.09, 0], {
+              if (pf < 1.5) return 1 + (pf / 1.5) * 0.1;
+              return 1 + interpolate(pf, [1.5, POP_DURATION], [0.1, 0], {
                 extrapolateLeft: "clamp",
                 extrapolateRight: "clamp",
               });
