@@ -174,7 +174,42 @@ function evenSpacing(lines: LyricLineInput[], durationSec: number): TimedLine[] 
   return buildLines(lines, lyric, startOf, durationSec, () => null);
 }
 
-/** Assemble final TimedLine[] over ALL lines (incl. section markers). */
+/**
+ * Pull an anomalously-early LEADING word cluster up to hug the first solid word
+ * after the gap, at natural sung pace. Fixes the common case where the ASR
+ * planted a spurious early "and/the/every", which otherwise drags the line's
+ * start ~2s early and pre-lights the opening words. `floor` = previous line's
+ * last word time (so we never overlap backwards).
+ */
+function declumpEarly(times: number[], floor: number): number[] {
+  const n = times.length;
+  if (n < 2) return times;
+  const out = times.slice();
+  const gaps: number[] = [];
+  for (let i = 0; i < n - 1; i++) gaps.push(out[i + 1] - out[i]);
+  const pos = gaps.filter((g) => g > 0).sort((a, b) => a - b);
+  const median = pos.length ? pos[Math.floor(pos.length / 2)] : 0.4;
+  const pace = Math.min(0.55, Math.max(0.25, median));
+  const BIG = Math.max(1.2, median * 3);
+  const lead = Math.max(1, Math.ceil(n * 0.6));
+  let gapIdx = -1;
+  for (let i = 0; i < lead && i < n - 1; i++) {
+    if (out[i + 1] - out[i] > BIG) { gapIdx = i; break; }
+  }
+  if (gapIdx >= 0) {
+    const anchor = out[gapIdx + 1];
+    for (let k = gapIdx; k >= 0; k--) out[k] = anchor - (gapIdx + 1 - k) * pace;
+    if (out[0] < floor) {
+      const shift = floor - out[0];
+      for (let k = 0; k <= gapIdx; k++) out[k] = Math.min(out[k] + shift, anchor - (gapIdx + 1 - k) * 0.1);
+    }
+  }
+  for (let i = 1; i < n; i++) if (out[i] < out[i - 1]) out[i] = out[i - 1];
+  return out;
+}
+
+/** Assemble final TimedLine[] over ALL lines (incl. section markers), with
+ *  per-line de-clumping of early leading words. */
 function buildLines(
   lines: LyricLineInput[],
   lyric: LyricLineInput[],
@@ -191,21 +226,38 @@ function buildLines(
     const e = i + 1 < lyric.length ? sOf.get(lyric[i + 1])! : durationSec;
     eOf.set(lyric[i], Math.max(e, s + 0.4));
   }
+
+  // Per-line word times with leading-cluster correction, processed in order.
+  const wordsByLine = new Map<LyricLineInput, TimedWord[]>();
+  let prevFloor = 0;
+  for (const l of lyric) {
+    const display = l.text.split(/\s+/).filter(Boolean);
+    const raw = display.map((_, idx) => wordTimeOf(l, idx));
+    const wt = declumpEarly(interpWordTimes(raw, sOf.get(l)!, eOf.get(l)!), prevFloor);
+    const words = display.map((w, idx) => ({ text: w, start: wt[idx] }));
+    wordsByLine.set(l, words);
+    if (words.length) sOf.set(l, words[0].start); // line appears when its first word lights
+    prevFloor = words.length ? words[words.length - 1].start : eOf.get(l)!;
+  }
+  // Recompute ends from corrected starts.
+  for (let i = 0; i < lyric.length; i++) {
+    const s = sOf.get(lyric[i])!;
+    const e = i + 1 < lyric.length ? sOf.get(lyric[i + 1])! : durationSec;
+    eOf.set(lyric[i], Math.max(e, s + 0.4));
+  }
+
   const out: TimedLine[] = [];
+  let lastStart = 0;
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
     if (l.isSection) {
       const next = lines.slice(i + 1).find((x) => !x.isSection);
-      const s = next ? sOf.get(next)! : last;
+      const s = next ? sOf.get(next)! : lastStart;
       out.push({ text: l.text, start: s, end: s + 0.4, isSection: true });
       continue;
     }
-    const ls = sOf.get(l)!;
-    const le = eOf.get(l)!;
-    const display = l.text.split(/\s+/).filter(Boolean);
-    const times = display.map((_, idx) => wordTimeOf(l, idx));
-    const wt = interpWordTimes(times, ls, le);
-    out.push({ text: l.text, start: ls, end: le, words: display.map((w, idx) => ({ text: w, start: wt[idx] })) });
+    lastStart = sOf.get(l)!;
+    out.push({ text: l.text, start: lastStart, end: eOf.get(l)!, words: wordsByLine.get(l) });
   }
   return out;
 }

@@ -13,17 +13,19 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const convex = new ConvexHttpClient(convexUrl());
   const jobId = arg("job");
   if (!jobId) throw new Error("--job <jobId> required");
+  const field = arg("field") ?? "previewUrl"; // e.g. karaokePreviewUrl
   const deadline = Date.now() + Number(arg("max") ?? "35") * 60_000;
   let prev = "";
   while (Date.now() < deadline) {
     const j: any = await convex.query(api.musicVideo.getJob, { jobId: jobId as any });
-    const line = `${j?.status} | ${j?.progress ?? ""} | ${j?.previewUrl ? "URL" : "-"}`;
+    const url = j?.[field];
+    const line = `${j?.status} | ${j?.progress ?? ""} | ${url ? "URL" : "-"}`;
     if (line !== prev) {
       console.log(new Date().toISOString().slice(11, 19), line);
       prev = line;
     }
-    if (["rendered", "held", "published"].includes(j?.status) && j?.previewUrl) {
-      console.log("PREVIEW_URL=" + j.previewUrl);
+    if (["rendered", "held", "published"].includes(j?.status) && url) {
+      console.log("PREVIEW_URL=" + url);
       process.exit(0);
     }
     if (j?.status === "failed") {
