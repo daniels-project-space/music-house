@@ -90,7 +90,7 @@ export const VinylMusicVideo: React.FC<VinylMusicVideoProps> = (props) => {
           transform: `translateX(${bgParallaxX}px)`,
         }}
       >
-        <Background accentColor={accentColor} bgSrc={bgSrc} />
+        <Background accentColor={accentColor} bgSrc={bgSrc} waveform={waveform} />
       </div>
 
       {/* Beat-reactive cluster wrapper */}
