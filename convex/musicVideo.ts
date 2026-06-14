@@ -190,6 +190,7 @@ export const getRenderInputs = query({
         instrumentalKey: track.instrumentalKey ?? null,
         sunoTaskId: track.sunoTaskId ?? null,
         sunoAudioId: track.sunoAudioId ?? null,
+        seedUrl: track.seedUrl ?? null,
         coverKey,
         durationSec: track.duration ?? null,
         isrc: track.isrc ?? null,
@@ -226,6 +227,15 @@ export const setSunoIds = mutation({
   args: { trackId: v.id("tracks"), sunoTaskId: v.string(), sunoAudioId: v.string() },
   handler: async (ctx, { trackId, sunoTaskId, sunoAudioId }) => {
     await ctx.db.patch(trackId, { sunoTaskId, sunoAudioId, instrumentalKey: undefined });
+    return { ok: true };
+  },
+});
+
+/** Set a streaming-link seed (e.g. Spotify URL) so the description resolves every platform. */
+export const setSeedUrl = mutation({
+  args: { trackId: v.id("tracks"), seedUrl: v.string() },
+  handler: async (ctx, { trackId, seedUrl }) => {
+    await ctx.db.patch(trackId, { seedUrl });
     return { ok: true };
   },
 });

@@ -198,7 +198,7 @@ export async function prepareRender(
   log(`Lyric alignment: ${aligned.method} (${aligned.confidence.toFixed(2)})`);
 
   await mark({ progress: "resolving streaming links" });
-  const links = await resolveLinks({ isrc: track.isrc, artist: artistName, title: track.title });
+  const links = await resolveLinks({ seedUrl: track.seedUrl, isrc: track.isrc, artist: artistName, title: track.title });
 
   // Playback audio: karaoke uses Suno's native vocals-removed instrumental.
   let audioPath = vocalPath;

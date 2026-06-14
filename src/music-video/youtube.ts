@@ -195,3 +195,26 @@ export async function deleteVideo(videoId: string, refreshToken?: string): Promi
     throw new Error(`videos.delete ${r.status}: ${(await r.text().catch(() => "")).slice(0, 160)}`);
   }
 }
+
+/** Update an existing video's title/description/tags in place. */
+export async function updateVideoMeta(
+  videoId: string,
+  meta: { title: string; description: string; tags: string[]; categoryId?: string },
+  refreshToken?: string,
+): Promise<void> {
+  const accessToken = await getAccessToken(refreshToken);
+  const r = await fetch(`${API_BASE}/videos?part=snippet`, {
+    method: "PUT",
+    headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      id: videoId,
+      snippet: {
+        title: meta.title,
+        description: meta.description,
+        tags: meta.tags,
+        categoryId: meta.categoryId ?? "10",
+      },
+    }),
+  });
+  if (!r.ok) throw new Error(`videos.update ${r.status}: ${(await r.text().catch(() => "")).slice(0, 200)}`);
+}

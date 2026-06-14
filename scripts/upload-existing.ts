@@ -28,7 +28,7 @@ import path from "node:path";
   if (!job?.videoKey) throw new Error("Job has no main videoKey (render the main video first).");
   const inp: any = await cx.query(api.musicVideo.getRenderInputs, { jobId: jobId as any });
   const t = inp.track;
-  const links = await resolveLinks({ isrc: t.isrc, artist: inp.artistName, title: t.title });
+  const links = await resolveLinks({ seedUrl: t.seedUrl, isrc: t.isrc, artist: inp.artistName, title: t.title });
   const lyricsSample = (t.lyrics ?? []).filter((l: any) => !l.isSection).map((l: any) => l.text).join(" ").slice(0, 400);
   const crafted = await craftMusicMetadata(
     {

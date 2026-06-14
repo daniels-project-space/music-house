@@ -42,6 +42,7 @@ export const insert = mutation({
     clapBestMatch: v.optional(v.string()),
     sunoTaskId: v.optional(v.string()),
     sunoAudioId: v.optional(v.string()),
+    seedUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) =>
     ctx.db.insert("tracks", { ...args, distributed: false, createdAt: Date.now() }),

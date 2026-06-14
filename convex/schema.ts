@@ -42,6 +42,7 @@ export default defineSchema({
     instrumentalKey: v.optional(v.string()), // cached vocals-removed stem (karaoke)
     sunoTaskId: v.optional(v.string()), // Suno generation task id (native stems)
     sunoAudioId: v.optional(v.string()), // Suno clip/audio id (native stems)
+    seedUrl: v.optional(v.string()), // streaming-link seed (e.g. Spotify URL) for resolveLinks
     coverKey: v.optional(v.string()),
     lyrics: v.optional(v.array(v.object({
       text: v.string(),

@@ -19,7 +19,7 @@ import { arg, convexUrl, loadEnvLocal } from "./_env";
   const inp: any = await cx.query(api.musicVideo.getRenderInputs, { jobId: jobId as any });
   if (!inp) throw new Error("no render inputs for job");
   const t = inp.track;
-  const links = await resolveLinks({ isrc: t.isrc, artist: inp.artistName, title: t.title });
+  const links = await resolveLinks({ seedUrl: t.seedUrl, isrc: t.isrc, artist: inp.artistName, title: t.title });
   const lyricsSample = (t.lyrics ?? []).filter((l: any) => !l.isSection).map((l: any) => l.text).join(" ").slice(0, 400);
   const crafted = await craftMusicMetadata(
     {
