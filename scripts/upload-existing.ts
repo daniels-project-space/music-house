@@ -8,7 +8,7 @@ import { ConvexHttpClient } from "convex/browser";
 import { api } from "../convex/_generated/api";
 import { resolveLinks } from "../src/music-video/links";
 import { craftMusicMetadata } from "../src/music-video/metacraft";
-import { uploadVideo, setVideoThumbnail } from "../src/music-video/youtube";
+import { uploadVideo, setVideoThumbnail, deleteVideo } from "../src/music-video/youtube";
 import { downloadToFile, getBuffer } from "../src/music-video/r2";
 import { arg, convexUrl, loadEnvLocal } from "./_env";
 import { tmpdir } from "node:os";
@@ -73,6 +73,17 @@ import path from "node:path";
     linksJson: JSON.stringify(links),
   });
   console.log("PUBLISHED:", up.url);
+
+  // --replace <oldVideoId>: delete the prior cut now that the new one is live.
+  const replace = arg("replace");
+  if (replace && replace !== up.videoId) {
+    try {
+      await deleteVideo(replace, token);
+      console.log("DELETED old video:", replace);
+    } catch (e) {
+      console.log("delete old failed (non-fatal):", String((e as Error).message).slice(0, 120));
+    }
+  }
 })().catch((e) => {
   console.error("FAILED:", String(e));
   process.exit(1);

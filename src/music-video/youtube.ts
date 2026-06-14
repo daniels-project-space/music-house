@@ -183,3 +183,15 @@ export async function getChannelMine(accessToken: string): Promise<{ id: string;
   if (!item) throw new Error("No channel found for this token");
   return { id: item.id, title: item.snippet.title };
 }
+
+/** Delete a video from the channel (used to replace a prior cut on re-upload). */
+export async function deleteVideo(videoId: string, refreshToken?: string): Promise<void> {
+  const accessToken = await getAccessToken(refreshToken);
+  const r = await fetch(`${API_BASE}/videos?id=${encodeURIComponent(videoId)}`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  if (!r.ok && r.status !== 204) {
+    throw new Error(`videos.delete ${r.status}: ${(await r.text().catch(() => "")).slice(0, 160)}`);
+  }
+}
