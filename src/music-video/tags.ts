@@ -13,7 +13,7 @@ export type VideoMeta = {
   aiDisclosure?: boolean;
 };
 
-const LABEL = "Music House Records";
+const LABEL = "Music House Productions";
 
 export function buildTitle(meta: VideoMeta): string {
   return `${meta.title} — ${meta.artist} (Official Audio)`.slice(0, 100);
@@ -24,10 +24,12 @@ const DESC_ORDER: PlatformKey[] = [
   "spotify",
   "appleMusic",
   "youtubeMusic",
+  "amazonMusic",
   "deezer",
   "tidal",
-  "amazonMusic",
   "soundcloud",
+  "pandora",
+  "youtube",
 ];
 
 export function buildDescription(meta: VideoMeta, links: ResolvedLinks): string {
@@ -66,7 +68,7 @@ function hashtagLine(meta: VideoMeta): string {
     slugHash(meta.artist),
     slugHash(meta.title),
     meta.genre ? slugHash(meta.genre) : null,
-    "musichouserecords",
+    "musichouseproductions",
     "officialaudio",
   ].filter(Boolean);
   return [...new Set(tags)].slice(0, 5).map((t) => `#${t}`).join(" ");
@@ -92,7 +94,7 @@ export function buildYouTubeTags(meta: VideoMeta): string[] {
     genre ? `${genre} 2026` : "",
     "official audio",
     `${meta.artist} official audio`,
-    "music house records",
+    "music house productions",
     "new music 2026",
     "new release",
     "indie music",

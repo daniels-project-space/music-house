@@ -107,10 +107,6 @@ export async function resolveByISRC(
   return { universal: null, byPlatform: {}, entityUniqueId: null };
 }
 
-function hasPlatforms(r: ResolvedLinks): boolean {
-  return Object.keys(r.byPlatform).length > 0;
-}
-
 /** Find an Apple Music URL via the public iTunes Search API (no auth) — a
  *  robust fallback seed when ISRC lookup misses. */
 async function seedFromITunes(artist: string, title: string): Promise<string | null> {
@@ -141,22 +137,44 @@ export async function resolveLinks(
   input: { isrc?: string | null; seedUrl?: string | null; artist?: string | null; title?: string | null },
   opts: { userCountry?: string } = {},
 ): Promise<ResolvedLinks> {
-  if (input.seedUrl) {
-    const r = await resolveStreamingLinks(input.seedUrl, opts);
-    if (hasPlatforms(r)) return r;
-  }
+  // Gather every seed we can, then MERGE Odesli results across all of them so
+  // the description lists EVERY platform the song is live on — even when one
+  // store's Odesli entity does not cross-link to another's.
+  const seeds: string[] = [];
+  if (input.seedUrl) seeds.push(input.seedUrl);
   if (input.isrc) {
-    const r = await resolveByISRC(input.isrc, opts);
-    if (hasPlatforms(r)) return r;
+    try {
+      const r = await fetch(`https://api.deezer.com/track/isrc:${encodeURIComponent(input.isrc)}`, {
+        headers: { accept: "application/json" },
+      });
+      if (r.ok) {
+        const j = (await r.json()) as { link?: string; error?: unknown };
+        if (j?.link && !j.error) seeds.push(j.link);
+      }
+    } catch {
+      /* ignore */
+    }
   }
   if (input.artist && input.title) {
     const apple = await seedFromITunes(input.artist, input.title);
-    if (apple) {
-      const r = await resolveStreamingLinks(apple, opts);
-      if (hasPlatforms(r)) return r;
-    }
+    if (apple) seeds.push(apple);
   }
-  return { universal: null, byPlatform: {}, entityUniqueId: null };
+
+  const merged: Partial<Record<PlatformKey, string>> = {};
+  let universal: string | null = null;
+  let entityUniqueId: string | null = null;
+  const tried = new Set<string>();
+  for (const seed of seeds) {
+    if (tried.has(seed)) continue;
+    tried.add(seed);
+    const r = await resolveStreamingLinks(seed, opts);
+    for (const [k, v] of Object.entries(r.byPlatform) as [PlatformKey, string][]) {
+      if (!merged[k]) merged[k] = v;
+    }
+    if (!universal) universal = r.universal;
+    if (!entityUniqueId) entityUniqueId = r.entityUniqueId;
+  }
+  return { universal, byPlatform: merged, entityUniqueId };
 }
 
 function seedToPartial(seedUrl: string): Partial<Record<PlatformKey, string>> {

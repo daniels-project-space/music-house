@@ -27,7 +27,7 @@ import { probeDurationSec } from "./ffprobe";
 import { extractWaveformEnvelope } from "./waveform";
 import { resolveLinks, type ResolvedLinks } from "./links";
 import { generateBackgroundPlate } from "./nano-banana";
-import { buildDescription, buildTitle, buildYouTubeTags } from "./tags";
+import { craftMusicMetadata } from "./metacraft";
 import { setVideoThumbnail, uploadVideo } from "./youtube";
 import { ensureInstrumental, findSunoIdsForTrack } from "./stems";
 
@@ -458,11 +458,12 @@ export async function uploadAndFinalize(
         isrc: meta.isrc ?? undefined,
         aiDisclosure: meta.isAi,
       };
+      const crafted = await craftMusicMetadata({ ...m, variant: meta.variant }, links, log);
       const up = await uploadVideo({
         filePath: finalPath,
-        title: buildTitle(m),
-        description: buildDescription(m, links),
-        tags: buildYouTubeTags(m),
+        title: crafted.title,
+        description: crafted.description,
+        tags: crafted.tags,
         categoryId: "10",
         privacyStatus: opts.privacy ?? "unlisted",
         refreshToken,
