@@ -8,7 +8,7 @@ import { ConvexHttpClient } from "convex/browser";
 import { api } from "../convex/_generated/api";
 import { resolveLinks } from "../src/music-video/links";
 import { craftMusicMetadata } from "../src/music-video/metacraft";
-import { uploadVideo, setVideoThumbnail, deleteVideo } from "../src/music-video/youtube";
+import { uploadVideo, setVideoThumbnail, deleteVideo, findYouTubeMusicLink } from "../src/music-video/youtube";
 import { downloadToFile, getBuffer } from "../src/music-video/r2";
 import { arg, convexUrl, loadEnvLocal } from "./_env";
 import { tmpdir } from "node:os";
@@ -29,6 +29,10 @@ import path from "node:path";
   const inp: any = await cx.query(api.musicVideo.getRenderInputs, { jobId: jobId as any });
   const t = inp.track;
   const links = await resolveLinks({ seedUrl: t.seedUrl, isrc: t.isrc, artist: inp.artistName, title: t.title });
+  if (!links.byPlatform.youtubeMusic) {
+    const ym = await findYouTubeMusicLink(inp.artistName, t.title, token);
+    if (ym) links.byPlatform.youtubeMusic = ym;
+  }
   const lyricsSample = (t.lyrics ?? []).filter((l: any) => !l.isSection).map((l: any) => l.text).join(" ").slice(0, 400);
   const crafted = await craftMusicMetadata(
     {

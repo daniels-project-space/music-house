@@ -28,7 +28,7 @@ import { extractWaveformEnvelope } from "./waveform";
 import { resolveLinks, type ResolvedLinks } from "./links";
 import { generateBackgroundPlate } from "./nano-banana";
 import { craftMusicMetadata } from "./metacraft";
-import { setVideoThumbnail, uploadVideo } from "./youtube";
+import { findYouTubeMusicLink, setVideoThumbnail, uploadVideo } from "./youtube";
 import { ensureInstrumental, findSunoIdsForTrack } from "./stems";
 
 const FPS = 30;
@@ -463,6 +463,14 @@ export async function uploadAndFinalize(
         isrc: meta.isrc ?? undefined,
         aiDisclosure: meta.isAi,
       };
+      try {
+        if (!links.byPlatform.youtubeMusic) {
+          const ym = await findYouTubeMusicLink(meta.artistName, meta.title, refreshToken);
+          if (ym) links.byPlatform.youtubeMusic = ym;
+        }
+      } catch {
+        /* YT Music enrich is best-effort */
+      }
       const crafted = await craftMusicMetadata({ ...m, variant: meta.variant }, links, log);
       const up = await uploadVideo({
         filePath: finalPath,

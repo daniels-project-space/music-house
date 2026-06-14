@@ -218,3 +218,34 @@ export async function updateVideoMeta(
   });
   if (!r.ok) throw new Error(`videos.update ${r.status}: ${(await r.text().catch(() => "")).slice(0, 200)}`);
 }
+
+/** Find a song's YouTube Music link via its auto-generated "- Topic" art track. */
+export async function findYouTubeMusicLink(
+  artist: string,
+  title: string,
+  refreshToken?: string,
+): Promise<string | null> {
+  try {
+    const accessToken = await getAccessToken(refreshToken);
+    const r = await fetch(
+      `${API_BASE}/search?part=snippet&type=video&maxResults=10&q=${encodeURIComponent(`${artist} ${title}`)}`,
+      { headers: { authorization: `Bearer ${accessToken}` } },
+    );
+    if (!r.ok) return null;
+    const j = (await r.json()) as { items?: { id?: { videoId?: string }; snippet?: { title?: string; channelTitle?: string } }[] };
+    const norm = (x: string) => (x || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const wantT = norm(title);
+    const wantA = norm(artist);
+    for (const it of j.items ?? []) {
+      const ch = it.snippet?.channelTitle ?? "";
+      const ti = it.snippet?.title ?? "";
+      const vid = it.id?.videoId;
+      if (vid && /-\s*topic$/i.test(ch) && norm(ti).includes(wantT) && norm(ch).includes(wantA)) {
+        return `https://music.youtube.com/watch?v=${vid}`;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
