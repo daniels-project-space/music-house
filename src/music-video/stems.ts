@@ -1,90 +1,105 @@
 /**
- * Vocal-removal / instrumental extraction for the karaoke variant.
+ * Instrumental extraction for the karaoke variant — Suno NATIVE stems.
  *
- * Suno has no stem API, so we separate stems with Demucs (htdemucs) on
- * Replicate — cloud, ~2-4 min, ~$0.01/track. The "vocals" two-stems mode yields
- * the isolated vocals + the clean instrumental ("no_vocals"). The result is
- * cached as the track's instrumentalKey in R2 so we only run it once per track.
+ * Suno's own get-stem API (sunoapi.org /vocal-removal) splits a platform track
+ * into a clean vocal + instrumental with Suno's source-separation model. This is
+ * far higher quality than a generic Demucs pass, so we use it exclusively.
+ *
+ * It requires the original generation's taskId + audioId — Suno only separates
+ * tracks created on its platform (uploaded audio is rejected). The instrumental
+ * is cached at a deterministic R2 key so we separate once per track. Tracks
+ * without live Suno IDs (e.g. imported MP3s) cannot be separated here and must
+ * have an instrumental supplied another way — we throw rather than fall back to
+ * Demucs, whose quality is not acceptable.
  */
-import { getBuffer, presignDownload, put } from "./r2";
+import { exists, put } from "./r2";
 import { getServiceSecrets } from "./vault";
 
-const DEMUCS_VERSION = "25a173108cff36ef9f80f854c162d01df9e6528be175794b81158fa03836d953"; // cjwbw/demucs
+const BASE = "https://api.sunoapi.org/api/v1";
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function replicateToken(): Promise<string> {
-  if (process.env.REPLICATE_API_TOKEN) return process.env.REPLICATE_API_TOKEN;
-  const env = await getServiceSecrets("replicate");
-  const k = env.REPLICATE_API_TOKEN ?? env.REPLICATE_API_KEY;
-  if (!k) throw new Error("REPLICATE_API_TOKEN not available (env or vault service 'replicate')");
+async function sunoKey(): Promise<string> {
+  if (process.env.SUNO_API_KEY) return process.env.SUNO_API_KEY;
+  const env = await getServiceSecrets("suno");
+  const k = env.SUNO_API_KEY;
+  if (!k) throw new Error("SUNO_API_KEY not available (env or vault service \"suno\")");
   return k;
 }
 
-/** Pick the instrumental URL out of Demucs output (object or array). */
-function pickInstrumental(output: unknown): string | null {
-  const entries: Array<[string, unknown]> = [];
-  if (Array.isArray(output)) output.forEach((v, i) => entries.push([String(i), v]));
-  else if (output && typeof output === "object") for (const [k, v] of Object.entries(output)) entries.push([k, v]);
-  const urls = entries.filter(([, v]) => typeof v === "string" && (v as string).startsWith("http")) as Array<[string, string]>;
-  const inst = urls.find(([k]) => /no[_-]?vocal|no[_-]?stem|instrumental|accompan|karaoke/i.test(k));
-  if (inst) return inst[1];
-  const nonVocal = urls.find(([k, v]) => !/vocal/i.test(k) && !/vocal/i.test(v));
-  return nonVocal ? nonVocal[1] : urls[0]?.[1] ?? null;
-}
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+export type EnsureInstrumentalArgs = {
+  sunoTaskId?: string | null;
+  sunoAudioId?: string | null;
+  /** track.instrumentalKey — only honoured as a cache when it equals destKey. */
+  cachedKey?: string | null;
+  /** Deterministic R2 key the native instrumental is stored at. */
+  destKey: string;
+  log: (m: string) => void;
+};
 
 /**
- * Ensure a clean instrumental exists for `audioKey`; returns its R2 key.
- * Uses the cached `instrumentalKey` if it already exists in R2.
+ * Ensure a clean Suno-native instrumental exists; returns its R2 key.
+ * Reuses destKey if already separated. Any legacy (non-native) instrumentalKey
+ * is ignored so we never reuse a Demucs stem.
  */
-export async function ensureInstrumental(
-  audioKey: string,
-  instrumentalKey: string | null,
-  cacheKeyBase: string,
-  log: (m: string) => void,
-): Promise<string> {
-  if (instrumentalKey && (await import("./r2").then((m) => m.exists(instrumentalKey)).catch(() => false))) {
-    log(`instrumental cached: ${instrumentalKey}`);
-    return instrumentalKey;
+export async function ensureInstrumental(args: EnsureInstrumentalArgs): Promise<string> {
+  const { sunoTaskId, sunoAudioId, cachedKey, destKey, log } = args;
+
+  if (cachedKey === destKey && (await exists(destKey).catch(() => false))) {
+    log(`suno instrumental cached: ${destKey}`);
+    return destKey;
+  }
+  if (!sunoTaskId || !sunoAudioId) {
+    throw new Error(
+      "Karaoke needs Suno native stems, but this track has no live sunoTaskId/sunoAudioId. " +
+        "Backfill them (musicVideo.setSunoIds) or supply an instrumental stem — Demucs is disabled.",
+    );
   }
 
-  const token = await replicateToken();
-  const audioUrl = await presignDownload(audioKey, 6 * 3600);
-
-  log("demucs: creating Replicate prediction…");
-  const create = await fetch("https://api.replicate.com/v1/predictions", {
+  const key = await sunoKey();
+  log(`suno stems: requesting separation (task ${sunoTaskId}, audio ${sunoAudioId})`);
+  const gen = await fetch(`${BASE}/vocal-removal/generate`, {
     method: "POST",
-    headers: { authorization: `Token ${token}`, "content-type": "application/json" },
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      version: DEMUCS_VERSION,
-      input: { audio: audioUrl, stem: "vocals", model_name: "htdemucs", output_format: "mp3" },
+      taskId: sunoTaskId,
+      audioId: sunoAudioId,
+      type: "separate_vocal",
+      callBackUrl:
+        process.env.SUNO_CALLBACK_URL || "https://music-house-nine.vercel.app/api/suno-callback",
     }),
   });
-  if (!create.ok) throw new Error(`Replicate create failed: ${create.status} ${await create.text().catch(() => "")}`);
-  let pred = (await create.json()) as { id: string; status: string; output?: unknown; error?: unknown; urls?: { get: string } };
+  if (!gen.ok)
+    throw new Error(`suno vocal-removal generate ${gen.status}: ${await gen.text().catch(() => "")}`);
+  const gj: any = await gen.json();
+  const sepTaskId = gj?.data?.taskId ?? gj?.taskId;
+  if (!sepTaskId)
+    throw new Error(`suno vocal-removal: no taskId in ${JSON.stringify(gj).slice(0, 300)}`);
 
-  const getUrl = pred.urls?.get ?? `https://api.replicate.com/v1/predictions/${pred.id}`;
   const deadline = Date.now() + 8 * 60 * 1000;
-  while (!["succeeded", "failed", "canceled"].includes(pred.status)) {
-    if (Date.now() > deadline) throw new Error("demucs timed out");
-    await sleep(3000);
-    const r = await fetch(getUrl, { headers: { authorization: `Token ${token}` } });
-    pred = (await r.json()) as typeof pred;
-    log(`demucs: ${pred.status}`);
+  let instUrl = "";
+  while (Date.now() < deadline) {
+    await sleep(5000);
+    const r = await fetch(
+      `${BASE}/vocal-removal/record-info?taskId=${encodeURIComponent(sepTaskId)}`,
+      { headers: { Authorization: `Bearer ${key}` } },
+    );
+    const j: any = await r.json();
+    const data = j?.data ?? {};
+    const flag = String(data.successFlag ?? data.status ?? "").toUpperCase();
+    log(`suno stems: ${flag || "pending"}`);
+    if (flag === "SUCCESS") {
+      instUrl =
+        data?.response?.instrumentalUrl ?? data?.response?.instrumental_url ?? "";
+      break;
+    }
+    if (flag.includes("FAIL") || flag === "ERROR" || flag.includes("SENSITIVE")) {
+      throw new Error(`suno stems failed: ${data.errorMessage ?? flag}`);
+    }
   }
-  if (pred.status !== "succeeded") throw new Error(`demucs ${pred.status}: ${JSON.stringify(pred.error)?.slice(0, 200)}`);
-
-  const instUrl = pickInstrumental(pred.output);
-  if (!instUrl) throw new Error(`demucs: no instrumental in output ${JSON.stringify(pred.output)?.slice(0, 200)}`);
+  if (!instUrl) throw new Error("suno stems: timed out / no instrumentalUrl");
 
   const buf = Buffer.from(await (await fetch(instUrl)).arrayBuffer());
-  const key = `${cacheKeyBase}-instrumental.mp3`;
-  await put(key, buf, "audio/mpeg");
-  log(`instrumental stored: ${key}`);
-  return key;
-}
-
-/** Download the instrumental's bytes (helper for callers that want a buffer). */
-export async function instrumentalBuffer(key: string): Promise<Buffer> {
-  return getBuffer(key);
+  await put(destKey, buf, "audio/mpeg");
+  log(`suno instrumental stored: ${destKey}`);
+  return destKey;
 }

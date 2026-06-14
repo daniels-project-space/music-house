@@ -69,6 +69,13 @@ export const scheduleForTrack = mutation({
         videoKey: undefined,
         youtubeUrl: undefined,
         youtubeVideoId: undefined,
+        karaokeStatus: undefined,
+        karaokeProgress: undefined,
+        karaokeVideoKey: undefined,
+        karaokePreviewUrl: undefined,
+        karaokeError: undefined,
+        karaokeYoutubeVideoId: undefined,
+        karaokeYoutubeUrl: undefined,
       });
       return existing._id;
     }
@@ -177,6 +184,8 @@ export const getRenderInputs = query({
         genre: track.genre ?? album?.genre ?? null,
         audioKey: track.audioKey,
         instrumentalKey: track.instrumentalKey ?? null,
+        sunoTaskId: track.sunoTaskId ?? null,
+        sunoAudioId: track.sunoAudioId ?? null,
         coverKey,
         durationSec: track.duration ?? null,
         isrc: track.isrc ?? null,
@@ -208,6 +217,15 @@ export const setInstrumentalKey = mutation({
   },
 });
 
+/** Backfill a track's live Suno generation IDs (enables native stem separation). */
+export const setSunoIds = mutation({
+  args: { trackId: v.id("tracks"), sunoTaskId: v.string(), sunoAudioId: v.string() },
+  handler: async (ctx, { trackId, sunoTaskId, sunoAudioId }) => {
+    await ctx.db.patch(trackId, { sunoTaskId, sunoAudioId, instrumentalKey: undefined });
+    return { ok: true };
+  },
+});
+
 /** Patch a job's status + any produced fields. Called by the Trigger tasks. */
 export const markStatus = mutation({
   args: {
@@ -230,6 +248,11 @@ export const markStatus = mutation({
     previewUrl: v.optional(v.string()),
     karaokeVideoKey: v.optional(v.string()),
     karaokePreviewUrl: v.optional(v.string()),
+    karaokeStatus: v.optional(v.string()),
+    karaokeProgress: v.optional(v.string()),
+    karaokeError: v.optional(v.string()),
+    karaokeYoutubeVideoId: v.optional(v.string()),
+    karaokeYoutubeUrl: v.optional(v.string()),
     youtubeVideoId: v.optional(v.string()),
     youtubeUrl: v.optional(v.string()),
     linksJson: v.optional(v.string()),

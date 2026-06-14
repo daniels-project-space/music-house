@@ -33,8 +33,12 @@ export const musicVideoSweep = schedules.task({
         jobId: job.jobId as any,
         status: "rendering",
         progress: "queued for render",
+        karaokeStatus: "rendering",
+        karaokeProgress: "queued for render",
       });
-      await musicVideoRender.trigger({ jobId: job.jobId, convexUrl, doUpload: true, privacy: "unlisted" });
+      // Two videos per song: the normal music video + the karaoke (instrumental) cut.
+      await musicVideoRender.trigger({ jobId: job.jobId, convexUrl, doUpload: true, privacy: "unlisted", variant: "main" });
+      await musicVideoRender.trigger({ jobId: job.jobId, convexUrl, doUpload: true, privacy: "unlisted", variant: "karaoke" });
     }
     return { triggered: due.length };
   },

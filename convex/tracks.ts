@@ -40,6 +40,8 @@ export const insert = mutation({
     lyrics: v.optional(v.array(v.object({ text: v.string(), start: v.number(), isSection: v.boolean() }))),
     clapScore: v.optional(v.number()),
     clapBestMatch: v.optional(v.string()),
+    sunoTaskId: v.optional(v.string()),
+    sunoAudioId: v.optional(v.string()),
   },
   handler: async (ctx, args) =>
     ctx.db.insert("tracks", { ...args, distributed: false, createdAt: Date.now() }),

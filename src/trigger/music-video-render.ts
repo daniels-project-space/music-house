@@ -15,6 +15,7 @@ import os from "node:os";
 import {
   concatChunksWithAudio,
   convexClient,
+  finalizePreview,
   marker,
   prepareRender,
   uploadAndFinalize,
@@ -29,35 +30,66 @@ export type MusicVideoRenderPayload = {
   privacy?: "private" | "unlisted" | "public";
   chunks?: number;
   variant?: "main" | "karaoke";
+  /**
+   * Preview/iterate mode: render ONE short slice at FULL quality for QA instead
+   * of the whole song. Uploads the clip to a dedicated R2 preview key (never the
+   * real videoKey) and never publishes. A full 12-chunk render costs ~$3 on
+   * Trigger; a 20s preview costs ~$0.25 — so tuning iterations stop re-rendering
+   * the entire 1080p video. The final locked render (preview omitted) is
+   * byte-identical to today's output: same chunk renderer, same concat path.
+   */
+  preview?: boolean;
+  previewSec?: number; // preview clip length, default 20, clamped 2..60
+  previewStartSec?: number; // where in the song the preview starts, default 0
 };
 
 export const musicVideoRender = task({
   id: "music-video-render",
   // Orchestrator compute = prepare + ffmpeg concat/mux + uploads (the parallel
   // chunk renders are separate workers and run while this task is suspended).
-  maxDuration: 1800,
+  // maxDuration is a WALL-CLOCK ceiling that includes the suspended wait for the
+  // chunk fan-out; billed compute is only the active phases (~90s). At 1800s a
+  // slow render (a chunk near the 1500s cap, or one that retries) tripped the
+  // ceiling AFTER chunks finished — killing the orchestrator and wasting every
+  // completed chunk render. 5400s covers a worst-case chunk + one retry; the
+  // higher ceiling costs nothing (suspended time isn't billed).
+  maxDuration: 5400,
   machine: "large-1x",
   retry: { maxAttempts: 1 },
   run: async (payload: MusicVideoRenderPayload) => {
     const log = (m: string) => logger.info(m);
     const convex = convexClient(payload.convexUrl);
-    const mark = marker(convex, payload.jobId);
+    const mark = marker(convex, payload.jobId, payload.variant ?? "main");
 
     const ctx = await prepareRender(convex, payload.jobId, log, payload.variant ?? "main");
     const stitchDir = path.join(os.tmpdir(), `mv-stitch-${payload.jobId}`);
 
+    const preview = payload.preview === true;
+    const fps = ctx.props.fps ?? 30;
+    const previewStartSec = preview ? Math.max(0, payload.previewStartSec ?? 0) : 0;
+
     try {
-      const N = Math.max(1, Math.min(24, payload.chunks ?? Number(process.env.MV_CHUNKS ?? 12)));
       const total = ctx.durationInFrames;
-      const per = Math.ceil(total / N);
       const ranges: Array<{ index: number; start: number; end: number }> = [];
-      for (let i = 0; i < N; i++) {
-        const start = i * per;
-        if (start >= total) break;
-        ranges.push({ index: ranges.length, start, end: Math.min(total - 1, start + per - 1) });
+      if (preview) {
+        // QA slice: a single full-quality chunk covering ~previewSec seconds.
+        const lenSec = Math.max(2, Math.min(60, payload.previewSec ?? 20));
+        const startF = Math.min(Math.max(0, total - 2), Math.round(previewStartSec * fps));
+        const endF = Math.min(total - 1, startF + Math.round(lenSec * fps) - 1);
+        ranges.push({ index: 0, start: startF, end: endF });
+        await mark({ progress: `PREVIEW · 1 chunk ~${lenSec}s @ ${fps}fps (full quality, no upload)` });
+        log(`PREVIEW: 1 chunk frames ${startF}..${endF} (~${lenSec}s from ${previewStartSec}s) — full quality`);
+      } else {
+        const N = Math.max(1, Math.min(24, payload.chunks ?? Number(process.env.MV_CHUNKS ?? 12)));
+        const per = Math.ceil(total / N);
+        for (let i = 0; i < N; i++) {
+          const start = i * per;
+          if (start >= total) break;
+          ranges.push({ index: ranges.length, start, end: Math.min(total - 1, start + per - 1) });
+        }
+        await mark({ progress: `rendering · ${ranges.length} parallel chunks` });
+        log(`Fan-out: ${ranges.length} chunks × ~${per} frames (total ${total})`);
       }
-      await mark({ progress: `rendering · ${ranges.length} parallel chunks` });
-      log(`Fan-out: ${ranges.length} chunks × ~${per} frames (total ${total})`);
 
       const items = ranges.map((r) => ({
         payload: {
@@ -89,7 +121,19 @@ export const musicVideoRender = task({
         localPartials.push(p);
       }
       const finalOut = path.join(stitchDir, "final.mp4");
-      await concatChunksWithAudio(localPartials, ctx.audioPath, finalOut, stitchDir, log);
+      // Preview slices may start mid-song; offset the muxed audio so it stays in
+      // sync with the rendered frames (-shortest then trims to the slice).
+      await concatChunksWithAudio(localPartials, ctx.audioPath, finalOut, stitchDir, log, previewStartSec);
+
+      if (preview) {
+        return await finalizePreview(
+          convex,
+          payload.jobId,
+          finalOut,
+          { trackId: ctx.meta.trackId, variant: ctx.meta.variant },
+          log,
+        );
+      }
 
       return await uploadAndFinalize(
         convex,

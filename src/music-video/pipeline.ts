@@ -86,9 +86,39 @@ export function convexClient(url?: string): ConvexHttpClient {
   return new ConvexHttpClient(u);
 }
 
-export function marker(convex: ConvexHttpClient, jobId: string) {
-  return (patch: Record<string, unknown>) =>
-    convex.mutation(api.musicVideo.markStatus, { jobId: jobId as any, ...patch });
+const KARAOKE_FIELD_MAP: Record<string, string> = {
+  status: "karaokeStatus",
+  progress: "karaokeProgress",
+  error: "karaokeError",
+  videoKey: "karaokeVideoKey",
+  previewUrl: "karaokePreviewUrl",
+  youtubeVideoId: "karaokeYoutubeVideoId",
+  youtubeUrl: "karaokeYoutubeUrl",
+};
+// Fields meaningful only to the main render — never written on the karaoke run.
+const KARAOKE_DROP = new Set(["linksJson", "timedLyricsJson", "alignMethod", "triggerRunId"]);
+
+/**
+ * Job status writer. For the karaoke variant, generic fields are auto-remapped
+ * to karaoke-namespaced counterparts so the main + karaoke renders write to the
+ * SAME job row without clobbering each other.
+ */
+export function marker(
+  convex: ConvexHttpClient,
+  jobId: string,
+  variant: "main" | "karaoke" = "main",
+) {
+  return (patch: Record<string, unknown>) => {
+    let p = patch;
+    if (variant === "karaoke") {
+      p = {};
+      for (const [k, v] of Object.entries(patch)) {
+        if (KARAOKE_DROP.has(k)) continue;
+        p[KARAOKE_FIELD_MAP[k] ?? k] = v;
+      }
+    }
+    return convex.mutation(api.musicVideo.markStatus, { jobId: jobId as any, ...p });
+  };
 }
 
 function resolveServeUrl(): string {
@@ -123,7 +153,7 @@ export async function prepareRender(
   log: (m: string) => void,
   variant: "main" | "karaoke" = "main",
 ): Promise<RenderContext> {
-  const mark = marker(convex, jobId);
+  const mark = marker(convex, jobId, variant);
   await mark({ status: "rendering", progress: "loading inputs" });
 
   const inputs = (await convex.query(api.musicVideo.getRenderInputs, { jobId: jobId as any })) as any;
@@ -161,17 +191,19 @@ export async function prepareRender(
   await mark({ progress: "resolving streaming links" });
   const links = await resolveLinks({ isrc: track.isrc, artist: artistName, title: track.title });
 
-  // Playback audio: karaoke uses the vocals-removed instrumental (Demucs).
+  // Playback audio: karaoke uses Suno's native vocals-removed instrumental.
   let audioPath = vocalPath;
   let audioSrc: string;
   if (variant === "karaoke") {
-    await mark({ progress: "separating vocals (demucs)" });
-    const instKey = await ensureInstrumental(
-      track.audioKey,
-      track.instrumentalKey,
-      `music-video/stems/${inputs.track.id}`,
+    await mark({ progress: "separating stems (suno native)" });
+    const destKey = `music-video/stems/${inputs.track.id}-suno-instrumental.mp3`;
+    const instKey = await ensureInstrumental({
+      sunoTaskId: track.sunoTaskId,
+      sunoAudioId: track.sunoAudioId,
+      cachedKey: track.instrumentalKey,
+      destKey,
       log,
-    );
+    });
     if (instKey !== track.instrumentalKey) {
       await convex.mutation(api.musicVideo.setInstrumentalKey, {
         trackId: inputs.track.id,
@@ -254,6 +286,16 @@ export async function renderToFile(
     inputProps: props,
     chromiumOptions: { gl: "swangle", disableWebSecurity: true },
   });
+  // Remotion's default concurrency is round(min(8, cores/2)) — only HALF the
+  // box. These chunks are CPU-bound 1080p software (swangle) renders, so at the
+  // default we pay for the whole machine but use half of it. Use cores-1 (leave
+  // one thread for node/ffmpeg/the encode), capped at 3 tabs (~2GB each) so
+  // large-1x's 8GB never OOMs. Env MV_CONCURRENCY overrides for tuning.
+  const cores = (os.availableParallelism?.() ?? os.cpus().length) || 2;
+  const concurrency = process.env.MV_CONCURRENCY
+    ? Number(process.env.MV_CONCURRENCY)
+    : Math.max(2, Math.min(cores - 1, 3));
+  log(`render concurrency=${concurrency} (cores=${cores}, remotion-default=${Math.round(Math.min(8, Math.max(1, cores / 2)))})`);
   let lastPct = -1;
   await renderMedia({
     serveUrl,
@@ -266,7 +308,7 @@ export async function renderToFile(
     inputProps: props,
     imageFormat: "jpeg",
     jpegQuality: 80,
-    concurrency: process.env.MV_CONCURRENCY ? Number(process.env.MV_CONCURRENCY) : null,
+    concurrency,
     chromiumOptions: { gl: "swangle", disableWebSecurity: true },
     onProgress: ({ progress }) => {
       const pct = Math.round(progress * 100);
@@ -296,16 +338,21 @@ export async function concatChunksWithAudio(
   outPath: string,
   workDir: string,
   log: (m: string) => void,
+  audioStartSec = 0,
 ): Promise<string> {
   const listPath = path.join(workDir, "concat.txt");
   await writeFile(listPath, partialPaths.map((p) => `file '${p}'`).join("\n"));
   // Re-encode on concat for robustness across separately-encoded h264 segments,
   // and mux the original audio. -shortest trims to the (slightly shorter) audio.
+  // audioStartSec > 0 (preview slices that start mid-song) seeks the audio so it
+  // stays aligned with the rendered frames; the full render passes 0 (no change).
+  const audioInput =
+    audioStartSec > 0 ? ["-ss", String(audioStartSec), "-i", audioPath] : ["-i", audioPath];
   await runFfmpeg(
     [
       "-v", "error", "-y",
       "-f", "concat", "-safe", "0", "-i", listPath,
-      "-i", audioPath,
+      ...audioInput,
       "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
       "-c:a", "aac", "-b:a", "192k",
       "-map", "0:v:0", "-map", "1:a:0", "-shortest",
@@ -314,6 +361,29 @@ export async function concatChunksWithAudio(
     log,
   );
   return outPath;
+}
+
+/**
+ * Preview finalize: upload a short QA clip to a DEDICATED R2 key and surface its
+ * presigned URL via the job's progress line + the task return value. It never
+ * touches the real videoKey/previewUrl/status fields and never publishes — so a
+ * preview render can't clobber a finished video or trip the YouTube upload gate.
+ */
+export async function finalizePreview(
+  convex: ConvexHttpClient,
+  jobId: string,
+  finalPath: string,
+  meta: { trackId: string; variant: "main" | "karaoke" },
+  log: (m: string) => void,
+): Promise<{ jobId: string; previewClipKey: string; previewClipUrl: string; preview: true }> {
+  const mark = marker(convex, jobId, meta.variant);
+  const previewClipKey = `music-video/${meta.trackId}/_preview-${meta.variant}.mp4`;
+  await put(previewClipKey, await readFile(finalPath), "video/mp4");
+  const previewClipUrl = await presignDownload(previewClipKey, 24 * 3600);
+  await mark({ progress: `PREVIEW READY → ${previewClipUrl}` });
+  log(`Preview clip → ${previewClipKey}`);
+  log(`PREVIEW URL (24h): ${previewClipUrl}`);
+  return { jobId, previewClipKey, previewClipUrl, preview: true };
 }
 
 /** Stage 3: upload final mp4 → R2, presign, mark rendered, gated YouTube. */
@@ -325,9 +395,9 @@ export async function uploadAndFinalize(
   opts: { doUpload?: boolean; privacy?: "private" | "unlisted" | "public" },
   log: (m: string) => void,
 ): Promise<RunResult> {
-  const mark = marker(convex, jobId);
   const { meta, links } = ctx;
   const isKaraoke = meta.variant === "karaoke";
+  const mark = marker(convex, jobId, meta.variant);
   await mark({ progress: "uploading to R2" });
   const slug = meta.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const videoKey = isKaraoke
@@ -336,18 +406,14 @@ export async function uploadAndFinalize(
   await put(videoKey, await readFile(finalPath), "video/mp4");
   const previewUrl = await presignDownload(videoKey, 7 * 24 * 3600);
 
-  await mark(
-    isKaraoke
-      ? { status: "rendered", progress: "karaoke rendered", karaokeVideoKey: videoKey, karaokePreviewUrl: previewUrl }
-      : {
-          status: "rendered",
-          progress: "rendered",
-          videoKey,
-          previewUrl,
-          linksJson: JSON.stringify(links),
-          alignMethod: ctx.alignMethod,
-        },
-  );
+  await mark({
+    status: "rendered",
+    progress: "rendered",
+    videoKey,
+    previewUrl,
+    linksJson: JSON.stringify(links),
+    alignMethod: ctx.alignMethod,
+  });
   log(`Rendered → ${videoKey}`);
 
   const result: RunResult = { jobId, videoKey, previewUrl, held: true, alignMethod: ctx.alignMethod };
@@ -402,7 +468,7 @@ export async function runMusicVideoJob(opts: {
 }): Promise<RunResult> {
   const log = opts.log ?? (() => {});
   const convex = convexClient(opts.convexUrl);
-  const mark = marker(convex, opts.jobId);
+  const mark = marker(convex, opts.jobId, opts.variant ?? "main");
   const ctx = await prepareRender(convex, opts.jobId, log, opts.variant ?? "main");
   const out = path.join(os.tmpdir(), `mv-${opts.jobId}.mp4`);
   try {

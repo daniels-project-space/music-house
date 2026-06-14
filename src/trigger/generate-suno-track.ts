@@ -4,6 +4,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import * as suno from "../lib/suno";
 import { downloadToR2, slug } from "../lib/transfer";
+import { ensureInstrumental } from "../music-video/stems";
 
 function convexClient() {
   const url = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -97,6 +98,8 @@ export const generateSunoTrack = task({
         generator: "suno",
         audioKey,
         coverKey,
+        sunoTaskId: taskId,
+        sunoAudioId: audioId,
         // Capture whatever lyrics exist at inception: Suno's returned lyrics
         // (vocal tracks) take precedence over the prompt we sent in.
         lyrics: (() => {
@@ -105,6 +108,23 @@ export const generateSunoTrack = task({
         })(),
       });
       created.push(id);
+
+      // Cache Suno's native instrumental stem now so the karaoke video can be
+      // auto-rendered later with zero extra setup (best-effort; never fails gen).
+      try {
+        const destKey = `music-video/stems/${id}-suno-instrumental.mp3`;
+        const instKey = await ensureInstrumental({
+          sunoTaskId: taskId,
+          sunoAudioId: audioId,
+          cachedKey: null,
+          destKey,
+          log: (m) => logger.info(m),
+        });
+        await cx.mutation(api.musicVideo.setInstrumentalKey, { trackId: id, instrumentalKey: instKey });
+        logger.info("suno:instrumental stem cached", { destKey });
+      } catch (e) {
+        logger.warn("suno:instrumental separation failed (non-fatal)", { err: String(e).slice(0, 200) });
+      }
     }
 
     await cx.mutation(api.jobs.setComplete, { id: input.jobId, resultTrackIds: created });

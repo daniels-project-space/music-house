@@ -40,6 +40,8 @@ export default defineSchema({
     audioKey: v.string(),
     flacKey: v.optional(v.string()),
     instrumentalKey: v.optional(v.string()), // cached vocals-removed stem (karaoke)
+    sunoTaskId: v.optional(v.string()), // Suno generation task id (native stems)
+    sunoAudioId: v.optional(v.string()), // Suno clip/audio id (native stems)
     coverKey: v.optional(v.string()),
     lyrics: v.optional(v.array(v.object({
       text: v.string(),
@@ -206,6 +208,11 @@ export default defineSchema({
     previewUrl: v.optional(v.string()), // presigned R2 url for review
     karaokeVideoKey: v.optional(v.string()),
     karaokePreviewUrl: v.optional(v.string()),
+    karaokeStatus: v.optional(v.string()),
+    karaokeProgress: v.optional(v.string()),
+    karaokeError: v.optional(v.string()),
+    karaokeYoutubeVideoId: v.optional(v.string()),
+    karaokeYoutubeUrl: v.optional(v.string()),
     youtubeVideoId: v.optional(v.string()),
     youtubeUrl: v.optional(v.string()),
     linksJson: v.optional(v.string()), // ResolvedLinks JSON
