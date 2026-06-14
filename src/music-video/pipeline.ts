@@ -30,6 +30,7 @@ import { generateBackgroundPlate } from "./nano-banana";
 import { craftMusicMetadata } from "./metacraft";
 import { findYouTubeMusicLink, setVideoThumbnail, uploadVideo } from "./youtube";
 import { ensureInstrumental, findSunoIdsForTrack } from "./stems";
+import { findSpotifyLink } from "./spotify-find";
 
 const FPS = 30;
 const ACCENT_DEFAULT = "#E8B84B";
@@ -463,6 +464,14 @@ export async function uploadAndFinalize(
         isrc: meta.isrc ?? undefined,
         aiDisclosure: meta.isAi,
       };
+      try {
+        if (!links.byPlatform.spotify) {
+          const sp = await findSpotifyLink(meta.artistName, meta.title);
+          if (sp) links.byPlatform.spotify = sp;
+        }
+      } catch {
+        /* Spotify enrich is best-effort */
+      }
       try {
         if (!links.byPlatform.youtubeMusic) {
           const ym = await findYouTubeMusicLink(meta.artistName, meta.title, refreshToken);
