@@ -76,6 +76,14 @@ export const Background: React.FC<BackgroundProps> = ({ accentColor, bgSrc, wave
   const amp = waveform.length ? (waveform[Math.min(frame, waveform.length - 1)] ?? 0) : 0;
   // Emphasize larger beats: small fluctuations barely move, big hits clearly bounce
   const beat = Math.pow(amp, 1.6);
+  // Smoothed beat for the aurora blobs — averaged over a window so they swell
+  // GENTLY rather than flashing on every transient (the flashing was distracting).
+  let _acc = 0;
+  let _cnt = 0;
+  for (let k = frame - 6; k <= frame + 6; k++) {
+    if (k >= 0 && k < waveform.length) { _acc += waveform[k]; _cnt++; }
+  }
+  const smoothBeat = Math.pow(_cnt ? _acc / _cnt : amp, 1.7);
 
   // Parse accentColor hex → rgb
   const hex = accentColor.replace("#", "");
@@ -142,17 +150,17 @@ export const Background: React.FC<BackgroundProps> = ({ accentColor, bgSrc, wave
         const breathe = 0.5 + 0.5 * Math.sin(frame / blob.scalePeriod * Math.PI * 2 + blob.scalePhase);
         const baseDriftScale = blob.scaleMin + breathe * (1.0 - blob.scaleMin);
 
-        // Per-blob beat phase offset: each blob responds differently to the beat
+        // Per-blob beat phase offset: each blob responds slightly differently
         const blobBeatPhase = 0.7 + 0.3 * ((i * 0.37) % 1);
-        const blobBeat = beat * blobBeatPhase;
+        const blobBeat = smoothBeat * blobBeatPhase;
 
-        // Beat adds a scale bounce on top of the slow drift
-        const scale = baseDriftScale * (1 + blobBeat * 0.35);
+        // Beat adds only a SMALL, smooth scale swell on top of the slow drift
+        const scale = baseDriftScale * (1 + blobBeat * 0.12);
         const rx = blob.rx * scale;
         const ry = blob.ry * scale;
 
-        // Opacity also flares on the beat (clamped to 1.0)
-        const blobOpacity = Math.min(blob.opacity * (1 + blobBeat * 0.5), 1.0);
+        // Steady opacity — NO beat flash (was distracting)
+        const blobOpacity = blob.opacity;
 
         let color: string;
         if (blob.kind === 0) {
