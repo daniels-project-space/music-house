@@ -3,7 +3,7 @@
  *
  * This is the ONLY recurring schedule in the pipeline — it is a generic
  * heartbeat, NOT a per-channel cadence. Each released single creates its own
- * +5-day `musicVideoJobs` row (see distribution.setSubmitted); this sweep just
+ * +10-day `musicVideoJobs` row (see distribution.setSubmitted); this sweep just
  * fires the ones that have come due. Marks each "rendering" on dispatch so a
  * later sweep can't double-trigger it.
  */
@@ -37,8 +37,8 @@ export const musicVideoSweep = schedules.task({
         karaokeProgress: "queued for render",
       });
       // Two videos per song: the normal music video + the karaoke (instrumental) cut.
-      await musicVideoRender.trigger({ jobId: job.jobId, convexUrl, doUpload: true, privacy: "unlisted", variant: "main" });
-      await musicVideoRender.trigger({ jobId: job.jobId, convexUrl, doUpload: true, privacy: "unlisted", variant: "karaoke" });
+      await musicVideoRender.trigger({ jobId: job.jobId, convexUrl, doUpload: true, privacy: "public", variant: "main" });
+      await musicVideoRender.trigger({ jobId: job.jobId, convexUrl, doUpload: true, privacy: "public", variant: "karaoke" });
     }
     return { triggered: due.length };
   },

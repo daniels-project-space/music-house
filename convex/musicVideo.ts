@@ -2,7 +2,7 @@
  * Music Video pipeline — Convex functions (standalone).
  *
  * One musicVideoJobs row per released single, created at release time with a
- * fireAt = distributedAt + 5 days. A daily Trigger.dev sweep calls `listDue`
+ * fireAt = distributedAt + 10 days. A daily Trigger.dev sweep calls `listDue`
  * and triggers the render task. These are PUBLIC functions because the Trigger
  * tasks reach Convex via ConvexHttpClient — none of them return secrets.
  */
@@ -11,7 +11,7 @@ import type { MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 
-const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
+const TEN_DAYS_MS = 10 * 24 * 60 * 60 * 1000;
 
 /**
  * Shared helper used by the distribution flow (distribution.setSubmitted) to
@@ -37,7 +37,7 @@ export async function scheduleMusicVideoForTrack(
     artistSlug: track.artistSlug,
     albumSlug: track.albumSlug,
     status: "scheduled",
-    fireAt: (distributedAt ?? now) + FIVE_DAYS_MS,
+    fireAt: (distributedAt ?? now) + TEN_DAYS_MS,
     createdAt: now,
     updatedAt: now,
   });
@@ -56,7 +56,7 @@ export const scheduleForTrack = mutation({
       .withIndex("by_track", (q) => q.eq("trackId", trackId))
       .first();
     const now = Date.now();
-    const targetFire = fireNow ? now : fireAt ?? now + FIVE_DAYS_MS;
+    const targetFire = fireNow ? now : fireAt ?? now + TEN_DAYS_MS;
     if (existing) {
       // Clear stale outputs so the dashboard/watcher don't show the prior render.
       await ctx.db.patch(existing._id, {

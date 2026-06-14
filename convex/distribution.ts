@@ -126,16 +126,23 @@ export const setSubmitted = mutation({
             q.eq("artistSlug", album.artistSlug).eq("albumSlug", album.slug),
           )
           .collect();
+        const distributedAt = Date.now();
         for (const t of tracks) {
           if (!t.archivedAt) {
-            await ctx.db.patch(t._id, { distributed: true, distributedAt: Date.now() });
+            await ctx.db.patch(t._id, { distributed: true, distributedAt });
+            // Schedule each album track's video too (+10 days), same as singles.
+            try {
+              await scheduleMusicVideoForTrack(ctx, t._id, distributedAt);
+            } catch {
+              /* non-fatal */
+            }
           }
         }
       }
     } else {
       const distributedAt = Date.now();
       await ctx.db.patch(job.trackId, { distributed: true, distributedAt });
-      // Standalone Music Video pipeline: schedule the YouTube video for +5 days
+      // Standalone Music Video pipeline: schedule the YouTube video for +10 days
       // (lets streaming stores propagate before we resolve "listen everywhere"
       // links). Idempotent; failure here must never break distribution.
       try {

@@ -212,7 +212,7 @@ export default defineSchema({
       v.literal("held"), // rendered but no channel connected yet
       v.literal("failed"),
     ),
-    fireAt: v.number(), // distributedAt + 5 days
+    fireAt: v.number(), // distributedAt + 10 days
     triggerRunId: v.optional(v.string()),
     videoKey: v.optional(v.string()), // R2 key of rendered mp4
     previewUrl: v.optional(v.string()), // presigned R2 url for review
