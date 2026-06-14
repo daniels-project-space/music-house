@@ -172,7 +172,7 @@ export async function craftMusicMetadata(
         `- title: standard music format like "${meta.artist} - ${meta.title} (${isK ? "Karaoke Instrumental" : "Official Audio"})" or a tasteful variant; <=95 chars; the real artist + song VERBATIM; no clickbait; never invent featured artists.`,
         `- hook: ONE short evocative line about the song's mood/vibe (no invented facts).`,
         `- blurb: 1-2 sentences (<=45 words) on the track's mood/genre for listeners; never invent collaborators, chart positions, or any fact not given above.`,
-        `- tags: 22-28 lowercase discovery tags (artist, song, genre, mood${isK ? ', "karaoke","instrumental","sing along"' : ', "official audio"'}, plus the real search queries). No "#".`,
+        `- tags: 22-28 lowercase discovery tags (artist, song, genre, mood, "music release"${isK ? ', "karaoke","instrumental","sing along"' : ', "official audio"'}, plus the real search queries). No "#".`,
         `Return STRICT JSON {"title":string,"hook":string,"blurb":string,"tags":string[]}.`,
       ]
         .filter(Boolean)
@@ -202,7 +202,7 @@ export async function craftMusicMetadata(
       lines.push("This track was created with the assistance of AI.");
     }
     const description = lines.join("\n").replace(/\n{3,}/g, "\n\n").trim().slice(0, 4900);
-    const tags = dedupeTags([...(gen.tags ?? []), isK ? "karaoke" : "official audio", meta.artist, meta.title], 30);
+    const tags = dedupeTags([...(gen.tags ?? []), isK ? "karaoke" : "official audio", "music release", meta.artist, meta.title], 30);
     if (tags.length < 5) throw new Error("too few tags from gemini");
     log(`metacraft(music): gemini ok — "${title}" (${tags.length} tags, ${Object.keys(links.byPlatform).length} links)`);
     return { title, description, tags, source: "gemini" };

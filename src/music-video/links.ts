@@ -7,6 +7,8 @@
  * are already indexed.
  */
 
+import { getServiceSecrets } from "./vault";
+
 export type PlatformKey =
   | "spotify"
   | "appleMusic"
@@ -127,6 +129,46 @@ async function seedFromITunes(artist: string, title: string): Promise<string | n
   }
 }
 
+/** Client-credentials Spotify token (vault service "spotify"). null if no creds. */
+async function spotifyToken(): Promise<string | null> {
+  try {
+    const env = await getServiceSecrets("spotify");
+    const id = env.SPOTIFY_CLIENT_ID;
+    const secret = env.SPOTIFY_CLIENT_SECRET;
+    if (!id || !secret) return null;
+    const r = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        authorization: "Basic " + Buffer.from(`${id}:${secret}`).toString("base64"),
+      },
+      body: "grant_type=client_credentials",
+    });
+    if (!r.ok) return null;
+    const j = (await r.json()) as { access_token?: string };
+    return j.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Find the real Spotify track URL for an ISRC (needs vault Spotify creds). */
+async function spotifyUrlByISRC(isrc: string): Promise<string | null> {
+  const tok = await spotifyToken();
+  if (!tok) return null;
+  try {
+    const r = await fetch(
+      `https://api.spotify.com/v1/search?type=track&limit=1&q=${encodeURIComponent("isrc:" + isrc)}`,
+      { headers: { authorization: `Bearer ${tok}` } },
+    );
+    if (!r.ok) return null;
+    const j = (await r.json()) as { tracks?: { items?: { external_urls?: { spotify?: string } }[] } };
+    return j?.tracks?.items?.[0]?.external_urls?.spotify ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Robustly resolve all-platform links, trying several seed routes in order and
  * returning the first that yields real platform links. Always works as long as
@@ -154,6 +196,8 @@ export async function resolveLinks(
     } catch {
       /* ignore */
     }
+    const sp = await spotifyUrlByISRC(input.isrc);
+    if (sp) seeds.push(sp);
   }
   if (input.artist && input.title) {
     const apple = await seedFromITunes(input.artist, input.title);

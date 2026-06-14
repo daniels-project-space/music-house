@@ -91,7 +91,7 @@ export const musicVideoRender = task({
         await mark({ progress: `PREVIEW · 1 chunk ~${lenSec}s @ ${fps}fps (full quality, no upload)` });
         log(`PREVIEW: 1 chunk frames ${startF}..${endF} (~${lenSec}s from ${previewStartSec}s) — full quality`);
       } else {
-        const N = Math.max(1, Math.min(24, payload.chunks ?? Number(process.env.MV_CHUNKS ?? 12)));
+        const N = Math.max(1, Math.min(24, payload.chunks ?? Number(process.env.MV_CHUNKS ?? 18)));
         const per = Math.ceil(total / N);
         for (let i = 0; i < N; i++) {
           const start = i * per;

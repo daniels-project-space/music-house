@@ -23,7 +23,7 @@ export type MusicVideoChunkPayload = {
 export const musicVideoChunk = task({
   id: "music-video-chunk",
   maxDuration: 1500,
-  machine: "large-1x",
+  machine: "large-2x",
   retry: { maxAttempts: 2 },
   run: async (payload: MusicVideoChunkPayload) => {
     const out = path.join(os.tmpdir(), `mv-chunk-${payload.jobId}-${payload.chunkIndex}.mp4`);

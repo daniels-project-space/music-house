@@ -93,6 +93,7 @@ export function buildYouTubeTags(meta: VideoMeta): string[] {
     genre ? `${genre} music` : "",
     genre ? `${genre} 2026` : "",
     "official audio",
+    "music release",
     `${meta.artist} official audio`,
     "music house productions",
     "new music 2026",

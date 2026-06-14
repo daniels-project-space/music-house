@@ -318,10 +318,14 @@ export async function renderToFile(
   // one thread for node/ffmpeg/the encode), capped at 3 tabs (~2GB each) so
   // large-1x's 8GB never OOMs. Env MV_CONCURRENCY overrides for tuning.
   const cores = (os.availableParallelism?.() ?? os.cpus().length) || 2;
+  // 4K pipeline: render the 1080 design at 2x = 3840x2160. Each 4K tab uses
+  // ~2x the RAM, so cap concurrency lower at scale>=2 to avoid OOM.
+  const scale = Number(process.env.MV_SCALE ?? 2);
+  const concCap = scale >= 2 ? 2 : 3;
   const concurrency = process.env.MV_CONCURRENCY
     ? Number(process.env.MV_CONCURRENCY)
-    : Math.max(2, Math.min(cores - 1, 3));
-  log(`render concurrency=${concurrency} (cores=${cores}, remotion-default=${Math.round(Math.min(8, Math.max(1, cores / 2)))})`);
+    : Math.max(1, Math.min(cores - 1, concCap));
+  log(`render scale=${scale} concurrency=${concurrency} (cores=${cores})`);
   let lastPct = -1;
   await renderMedia({
     serveUrl,
@@ -333,7 +337,8 @@ export async function renderToFile(
     outputLocation: outPath,
     inputProps: props,
     imageFormat: "jpeg",
-    jpegQuality: 80,
+    jpegQuality: 90,
+    scale,
     concurrency,
     chromiumOptions: { gl: "swangle", disableWebSecurity: true },
     onProgress: ({ progress }) => {
