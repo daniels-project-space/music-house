@@ -6,6 +6,8 @@ import { getBuffer } from "../lib/storage";
 import { distributeRouteNoteHttp, type CookieEntry } from "../lib/routenote-http";
 import { submitDistributeFreePlaywright } from "../lib/routenote-playwright";
 import { normalizeForRouteNote } from "../lib/audio-normalize";
+import { resolveReleaseLinks, hasAnyStoreLink } from "../lib/resolve-release-links";
+import { validateReleaseMetadata } from "../lib/validate-release-metadata";
 import type { refreshRoutenoteAuthNow } from "./refresh-routenote-auth";
 
 function convexClient() {
@@ -39,15 +41,32 @@ export const distributeSingle = task({
     const track = await cx.query(api.tracks.get, { id: job.trackId });
     if (!track) throw new Error("track not found");
 
+    // Album metadata — reused by the quality gate, the cover fallback, and the
+    // post-submit funnel-links hook below.
+    const releaseAlbum = track.albumSlug
+      ? await cx.query(api.albums.getOne, { artistSlug: track.artistSlug, slug: track.albumSlug })
+      : null;
+
+    // Metadata-quality gate (conservative): hard-block only when no genre exists
+    // anywhere — DistroKid requires one and the release would be rejected anyway.
+    // Missing description/cover are soft-flagged (logged), never blocked.
+    const meta = validateReleaseMetadata(track, releaseAlbum);
+    if (!meta.ok) {
+      const msg = `metadata gate: missing ${meta.hardMissing.join(", ")} — set a genre before distributing`;
+      await cx.mutation(api.distribution.setFailed, { id: input.jobId, error: msg });
+      throw new Error(msg);
+    }
+    if (meta.softMissing.length) {
+      logger.warn("dist:single:metadata soft-flags", { missing: meta.softMissing });
+      await cx.mutation(api.distribution.setProgress, {
+        id: input.jobId,
+        progress: `metadata note: missing ${meta.softMissing.join(", ")} (recommended for SEO)`,
+      });
+    }
+
     // Resolve cover key (track override → album cover fallback)
     let coverKey: string | undefined = track.coverKey;
-    if (!coverKey && track.albumSlug) {
-      const album = await cx.query(api.albums.getOne, {
-        artistSlug: track.artistSlug,
-        slug: track.albumSlug,
-      });
-      coverKey = album?.coverKey ?? undefined;
-    }
+    if (!coverKey && releaseAlbum) coverKey = releaseAlbum.coverKey ?? undefined;
 
     // Prefer FLAC (lossless) over MP3 if present — RouteNote accepts FLAC directly
     // with no re-encode needed.
@@ -218,6 +237,32 @@ export const distributeSingle = task({
       releaseUrl: submit.finalUrl,
     });
     logger.info("dist:single:submitted", { upc: result.upc, releaseUrl: submit.finalUrl });
+
+    // SEO funnel: resolve this release's streaming-store links and persist them on
+    // its album, so the public /r/{artist}/{album} page can link out to the stores.
+    // Best-effort — the release is already submitted; nothing here may throw.
+    if (track.albumSlug) {
+      try {
+        const storeLinks = await resolveReleaseLinks({
+          isrc: track.isrc ?? job.isrc,
+          seedUrl: track.seedUrl,
+          artist: artistName,
+          title: track.title,
+        });
+        if (hasAnyStoreLink(storeLinks)) {
+          await cx.mutation(api.albums.setStoreLinks, {
+            artistSlug: track.artistSlug,
+            slug: track.albumSlug,
+            links: storeLinks,
+          });
+          logger.info("dist:single:storeLinks", { keys: Object.keys(storeLinks) });
+        } else {
+          logger.info("dist:single:storeLinks none yet — stores not indexed");
+        }
+      } catch (e) {
+        logger.warn("dist:single:storeLinks failed", { error: (e as Error).message });
+      }
+    }
 
     return { upc: result.upc, releaseUrl: submit.finalUrl };
   },

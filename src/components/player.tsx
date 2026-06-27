@@ -14,7 +14,7 @@ export function Player() {
   const [dur, setDur] = useState(0);
   const [vol, setVol] = useState(0.85);
   const [shuffle, setShuffle] = useState(false);
-  const isPublicRoute = pathname.startsWith("/share");
+  const isPublicRoute = pathname.startsWith("/share") || pathname.startsWith("/r/");
 
   useEffect(() => {
     if (!audioRef.current || !current) return;

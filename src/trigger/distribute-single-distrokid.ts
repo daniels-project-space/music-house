@@ -14,6 +14,8 @@ import {
   type DistrokidTrack,
 } from "../lib/distrokid-cli";
 import { runDistrokidRelease } from "../lib/distrokid-native";
+import { resolveReleaseLinks, hasAnyStoreLink } from "../lib/resolve-release-links";
+import { validateReleaseMetadata } from "../lib/validate-release-metadata";
 
 function convexClient() {
   const url = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -60,15 +62,31 @@ export const distributeSingleDistrokid = task({
     const track = await cx.query(api.tracks.get, { id: job.trackId });
     if (!track) throw new Error("track not found");
 
+    // Album metadata — reused by the quality gate, the cover fallback, and the
+    // post-submit funnel-links hook below.
+    const releaseAlbum = track.albumSlug
+      ? await cx.query(api.albums.getOne, { artistSlug: track.artistSlug, slug: track.albumSlug })
+      : null;
+
+    // Metadata-quality gate (conservative): hard-block only when no genre exists
+    // anywhere — DistroKid requires one. Missing description/cover are soft-flagged.
+    const metaCheck = validateReleaseMetadata(track, releaseAlbum);
+    if (!metaCheck.ok) {
+      const msg = `metadata gate: missing ${metaCheck.hardMissing.join(", ")} — set a genre before distributing`;
+      await cx.mutation(api.distribution.setFailed, { id: input.jobId, error: msg });
+      throw new AbortTaskRunError(msg);
+    }
+    if (metaCheck.softMissing.length) {
+      logger.warn("dist:single:dk:metadata soft-flags", { missing: metaCheck.softMissing });
+      await cx.mutation(api.distribution.setProgress, {
+        id: input.jobId,
+        progress: `metadata note: missing ${metaCheck.softMissing.join(", ")} (recommended for SEO)`,
+      });
+    }
+
     // Resolve cover key (track override → album cover fallback)
     let coverKey: string | undefined = track.coverKey;
-    if (!coverKey && track.albumSlug) {
-      const album = await cx.query(api.albums.getOne, {
-        artistSlug: track.artistSlug,
-        slug: track.albumSlug,
-      });
-      coverKey = album?.coverKey ?? undefined;
-    }
+    if (!coverKey && releaseAlbum) coverKey = releaseAlbum.coverKey ?? undefined;
 
     // Prefer FLAC (lossless) over MP3 if present.
     const audioKey = (track as { flacKey?: string }).flacKey ?? track.audioKey;
@@ -271,6 +289,32 @@ export const distributeSingleDistrokid = task({
       upc: result.upc,
       releaseUrl: result.releaseUrl,
     });
+
+    // SEO funnel: resolve this release's streaming-store links and persist them on
+    // its album, so the public /r/{artist}/{album} page can link out to the stores.
+    // Best-effort — the release is already submitted; nothing here may throw.
+    if (track.albumSlug) {
+      try {
+        const storeLinks = await resolveReleaseLinks({
+          isrc: track.isrc ?? job.isrc,
+          seedUrl: track.seedUrl,
+          artist: artistName,
+          title: track.title,
+        });
+        if (hasAnyStoreLink(storeLinks)) {
+          await cx.mutation(api.albums.setStoreLinks, {
+            artistSlug: track.artistSlug,
+            slug: track.albumSlug,
+            links: storeLinks,
+          });
+          logger.info("dist:single:dk:storeLinks", { keys: Object.keys(storeLinks) });
+        } else {
+          logger.info("dist:single:dk:storeLinks none yet — stores not indexed");
+        }
+      } catch (e) {
+        logger.warn("dist:single:dk:storeLinks failed", { error: (e as Error).message });
+      }
+    }
 
     return { releaseId, upc: result.upc, releaseUrl: result.releaseUrl };
   },

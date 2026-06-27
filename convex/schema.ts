@@ -23,6 +23,20 @@ export default defineSchema({
     genre: v.optional(v.string()),
     coverKey: v.optional(v.string()),
     section: v.optional(v.string()),
+    // Resolved streaming-store links for the public funnel page (/r/...). Populated
+    // after a release goes live (distribute hook) or via the backfill script. The
+    // funnel page is only published once these exist — see albums:listReleased.
+    storeLinks: v.optional(
+      v.object({
+        universal: v.optional(v.string()),
+        spotify: v.optional(v.string()),
+        appleMusic: v.optional(v.string()),
+        youtube: v.optional(v.string()),
+        youtubeMusic: v.optional(v.string()),
+        deezer: v.optional(v.string()),
+      }),
+    ),
+    storeLinksAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     createdAt: v.number(),
   })

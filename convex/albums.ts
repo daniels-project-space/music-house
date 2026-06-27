@@ -23,6 +23,92 @@ export const getOne = query({
       .first(),
 });
 
+const storeLinksValidator = v.object({
+  universal: v.optional(v.string()),
+  spotify: v.optional(v.string()),
+  appleMusic: v.optional(v.string()),
+  youtube: v.optional(v.string()),
+  youtubeMusic: v.optional(v.string()),
+  deezer: v.optional(v.string()),
+});
+
+// True when an album has at least one usable streaming-store link.
+function hasUsableStoreLinks(links?: {
+  universal?: string;
+  spotify?: string;
+  appleMusic?: string;
+  youtube?: string;
+  youtubeMusic?: string;
+  deezer?: string;
+}): boolean {
+  if (!links) return false;
+  return Boolean(
+    links.universal ||
+      links.spotify ||
+      links.appleMusic ||
+      links.youtube ||
+      links.youtubeMusic ||
+      links.deezer,
+  );
+}
+
+// Single SSR fetch for the public funnel page: album (incl. storeLinks) + artist
+// + ordered, non-archived tracks. Returns null when the album does not exist.
+export const getRelease = query({
+  args: { artistSlug: v.string(), slug: v.string() },
+  handler: async (ctx, { artistSlug, slug }) => {
+    const album = await ctx.db
+      .query("albums")
+      .withIndex("by_artist_and_slug", (q) => q.eq("artistSlug", artistSlug).eq("slug", slug))
+      .first();
+    if (!album) return null;
+    const artist = await ctx.db
+      .query("artists")
+      .withIndex("by_slug", (q) => q.eq("slug", artistSlug))
+      .first();
+    const tracks = (
+      await ctx.db
+        .query("tracks")
+        .withIndex("by_artist_album", (q) => q.eq("artistSlug", artistSlug).eq("albumSlug", slug))
+        .collect()
+    )
+      .filter((t) => !t.archivedAt)
+      .sort((a, b) => (a.trackNum ?? 99) - (b.trackNum ?? 99));
+    return { album, artist, tracks };
+  },
+});
+
+// Albums that are live on stores (have resolved storeLinks) — drives the funnel
+// sitemap. We key on storeLinks, not the `distributed` flag, because the flag is
+// not reliably set for releases that went out via DistroKid directly.
+export const listReleased = query({
+  args: {},
+  handler: async (ctx) => {
+    const albums = await ctx.db.query("albums").collect();
+    return albums
+      .filter((a) => hasUsableStoreLinks(a.storeLinks))
+      .map((a) => ({
+        artistSlug: a.artistSlug,
+        slug: a.slug,
+        updatedAt: a.storeLinksAt ?? a.completedAt ?? a.createdAt,
+      }));
+  },
+});
+
+// Persist resolved streaming-store links onto an album (funnel page source).
+export const setStoreLinks = mutation({
+  args: { artistSlug: v.string(), slug: v.string(), links: storeLinksValidator },
+  handler: async (ctx, { artistSlug, slug, links }) => {
+    const album = await ctx.db
+      .query("albums")
+      .withIndex("by_artist_and_slug", (q) => q.eq("artistSlug", artistSlug).eq("slug", slug))
+      .first();
+    if (!album) throw new Error(`album ${artistSlug}/${slug} not found`);
+    await ctx.db.patch(album._id, { storeLinks: links, storeLinksAt: Date.now() });
+    return album._id;
+  },
+});
+
 export const upsert = mutation({
   args: {
     artistSlug: v.string(),
