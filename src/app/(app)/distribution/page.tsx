@@ -4,15 +4,50 @@ import { useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
+type PitchTarget = { artistSlug: string; albumSlug?: string; title: string };
+
 export default function DistributionPage() {
   const tracks = useQuery(api.tracks.list, {}) ?? [];
   const jobs = useQuery(api.distribution.listAll, {}) ?? [];
+  const artists = useQuery(api.artists.list, {}) ?? [];
   const setDistributed = useMutation(api.tracks.setDistributed);
   const setComplete = useMutation(api.distribution.setComplete);
   const [busy, setBusy] = useState<string | null>(null);
   const [distributor, setDistributor] = useState<"routenote" | "distrokid">("distrokid");
   const analytics = useQuery(api.distributorAnalytics.latest, { distributor: "distrokid" });
   const [refreshing, setRefreshing] = useState(false);
+
+  // Profile-continuity risk: released on DistroKid but no pinned Spotify id yet.
+  // Until claimed + pinned, the next release can spawn a DUPLICATE Spotify profile
+  // (splits streams, resets followers, breaks Release Radar continuity).
+  const unpinned = artists.filter((a) => a.distrokidReleased && !a.spotifyArtistId);
+
+  // Spotify pitch modal (Spotify-for-Artists copy — the manual algorithmic lever).
+  const [pitchTarget, setPitchTarget] = useState<PitchTarget | null>(null);
+  const [pitchText, setPitchText] = useState("");
+  const [pitchLoading, setPitchLoading] = useState(false);
+  const [pitchErr, setPitchErr] = useState<string | null>(null);
+
+  const openPitch = async (t: PitchTarget) => {
+    setPitchTarget(t);
+    setPitchText("");
+    setPitchErr(null);
+    setPitchLoading(true);
+    try {
+      const r = await fetch("/api/pitch/generate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ artistSlug: t.artistSlug, albumSlug: t.albumSlug, title: t.title }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "pitch failed");
+      setPitchText(j.pitch ?? "");
+    } catch (e) {
+      setPitchErr((e as Error).message);
+    } finally {
+      setPitchLoading(false);
+    }
+  };
 
   const refreshAnalytics = async () => {
     setRefreshing(true);
@@ -132,6 +167,47 @@ export default function DistributionPage() {
           </button>
         </div>
       ) : null}
+
+      {distributor === "distrokid" && unpinned.length > 0 ? (
+        <div
+          className="mb-4 px-3.5 py-3 rounded-lg border"
+          style={{ borderColor: "rgba(239,68,68,0.4)", background: "rgba(239,68,68,0.06)" }}
+        >
+          <p className="font-display text-[0.82rem] font-bold text-red mb-1">
+            ⚠ {unpinned.length} artist{unpinned.length > 1 ? "s" : ""} need a pinned Spotify profile
+          </p>
+          <p className="text-[0.74rem] text-paper-dim leading-relaxed">
+            {unpinned.map((a) => a.name).join(", ")} released on DistroKid but ha
+            {unpinned.length > 1 ? "ve" : "s"} no Spotify artist ID set. Claim the profile in{" "}
+            <a
+              href="https://artists.spotify.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-cyan underline"
+            >
+              Spotify for Artists
+            </a>
+            , then paste the artist ID in Library → album → edit <em>before the next release</em> — otherwise
+            DistroKid can create a duplicate profile (splits streams, resets followers, breaks Release Radar).
+          </p>
+        </div>
+      ) : null}
+
+      {distributor === "distrokid" ? (
+        <details className="mb-4 px-3.5 py-2.5 rounded-lg border bg-card" style={{ borderColor: "var(--color-brd)" }}>
+          <summary className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-paper-faint cursor-pointer">
+            Spotify algorithmic checklist (get into shuffle / Radio / Discover Weekly)
+          </summary>
+          <ul className="mt-2.5 space-y-1.5 text-[0.74rem] text-paper-dim leading-relaxed list-disc pl-4">
+            <li>Releases are auto-dated ~21 days out so the pitch window stays open (env <code className="text-cyan">DISTROKID_RELEASE_LEAD_DAYS</code>).</li>
+            <li>Pitch every release in Spotify for Artists <strong>≥7 days before</strong> release date — use the “♪ Pitch” button on each release to generate the copy.</li>
+            <li>Pin the Spotify artist ID after the first release so all releases land on one profile (Release Radar continuity).</li>
+            <li>Consider enrolling tracks in <strong>Discovery Mode</strong> (S4A) — boosts Radio/autoplay for a royalty trade-off.</li>
+            <li>Algorithmic pickup is driven by first-14-day engagement: save rate &gt;3.5%, stream-to-listener &gt;2.0, skip &lt;20%. Drive saves via the funnel + pre-save.</li>
+          </ul>
+        </details>
+      ) : null}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <Column color="#34d399" label="Ready">
           {ready.length === 0 ? (
@@ -192,6 +268,13 @@ export default function DistributionPage() {
                     </a>
                   ) : null}
                   <button
+                    onClick={() => openPitch({ artistSlug: t.artistSlug, albumSlug: t.albumSlug, title: t.title })}
+                    className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2 py-1 rounded border mr-2"
+                    style={{ borderColor: "#1db954", color: "#1db954" }}
+                  >
+                    ♪ Pitch
+                  </button>
+                  <button
                     onClick={() => setComplete({ id: j._id, releaseUrl: undefined })}
                     className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2 py-1 rounded border"
                     style={{ borderColor: "#06b6d4", color: "#06b6d4" }}
@@ -211,6 +294,13 @@ export default function DistributionPage() {
             done.slice(0, 80).map((t) => (
               <Row key={t._id} track={t}>
                 <button
+                  onClick={() => openPitch({ artistSlug: t.artistSlug, albumSlug: t.albumSlug, title: t.title })}
+                  className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2 py-1 rounded border mr-2"
+                  style={{ borderColor: "#1db954", color: "#1db954" }}
+                >
+                  ♪ Pitch
+                </button>
+                <button
                   onClick={() => setDistributed({ id: t._id as Id<"tracks">, distributed: false })}
                   className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2 py-1 rounded border opacity-0 group-hover:opacity-100 transition-opacity"
                   style={{ borderColor: "#06b6d4", color: "#06b6d4" }}
@@ -222,6 +312,55 @@ export default function DistributionPage() {
           )}
         </Column>
       </div>
+
+      {pitchTarget ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={() => setPitchTarget(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-lg border bg-card p-4 shadow-xl"
+            style={{ borderColor: "var(--color-brd)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-baseline justify-between mb-3">
+              <h3 className="font-display text-[0.95rem] font-bold text-paper truncate">
+                Spotify pitch — {pitchTarget.title}
+              </h3>
+              <button
+                onClick={() => setPitchTarget(null)}
+                className="font-mono text-[0.6rem] uppercase tracking-[0.14em] text-paper-faint hover:text-paper"
+              >
+                ✕ close
+              </button>
+            </div>
+            <p className="font-mono text-[0.55rem] uppercase tracking-[0.14em] text-paper-faint mb-2">
+              Paste into Spotify for Artists → pitch a song (do this ≥7 days before release)
+            </p>
+            {pitchLoading ? (
+              <p className="font-mono text-[0.7rem] text-paper-dim py-8 text-center">Writing pitch…</p>
+            ) : pitchErr ? (
+              <p className="font-mono text-[0.7rem] text-red py-4">{pitchErr}</p>
+            ) : (
+              <>
+                <textarea
+                  value={pitchText}
+                  onChange={(e) => setPitchText(e.target.value)}
+                  className="w-full bg-paper/[0.04] border border-brd rounded-md p-3 text-[0.75rem] text-t1 min-h-64 font-mono outline-none focus:border-purple/50 transition-colors leading-relaxed"
+                />
+                <button
+                  onClick={() => navigator.clipboard?.writeText(pitchText).catch(() => {})}
+                  className="mt-2 font-mono text-[0.6rem] uppercase tracking-[0.14em] px-3 py-1.5 rounded border text-cyan hover:bg-cyan/[0.06] transition-colors"
+                  style={{ borderColor: "rgba(6,182,212,0.4)" }}
+                >
+                  ⧉ Copy
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

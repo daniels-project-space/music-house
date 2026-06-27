@@ -23,6 +23,11 @@ export default defineSchema({
     genre: v.optional(v.string()),
     coverKey: v.optional(v.string()),
     section: v.optional(v.string()),
+    // Secondary DistroKid genre + the niche this album was built for. Sourced from
+    // the niche module at album-creation time; secondaryGenre is passed straight
+    // into the DistroKid payload so Spotify clusters the release accurately.
+    secondaryGenre: v.optional(v.string()),
+    nicheSlug: v.optional(v.string()),
     // Resolved streaming-store links for the public funnel page (/r/...). Populated
     // after a release goes live (distribute hook) or via the backfill script. The
     // funnel page is only published once these exist — see albums:listReleased.
@@ -199,6 +204,34 @@ export default defineSchema({
     balance: v.number(),
     currency: v.string(),
   }).index("by_distributor_time", ["distributor", "fetchedAt"]),
+
+  // ── Niche Intelligence (demand-first creation) ─────────────────────────
+  // One researched niche = the "niche overview" the AI Guerrilla workflow feeds
+  // its writer: canonical DistroKid genres, themes, instruments, BPM, reference
+  // artists, ready-to-paste style prompts. Drives grounded lyrics + accurate
+  // distribution genre. Researched via src/lib/nichecraft.ts (Claude + free
+  // YouTube autocomplete signal), stored here, picked in the studio.
+  nicheBank: defineTable({
+    slug: v.string(),
+    name: v.string(), // e.g. "Outlaw Country Rap"
+    seed: v.string(), // the raw search seed the user entered
+    primaryGenre: v.string(), // canonical DistroKid genre
+    secondaryGenre: v.optional(v.string()),
+    stylePrompts: v.array(v.string()), // 3-5 ready Suno/Mureka style prompts
+    themes: v.array(v.string()),
+    moods: v.array(v.string()),
+    instruments: v.array(v.string()),
+    culturalTags: v.array(v.string()), // for the Spotify-for-Artists pitch form
+    referenceArtists: v.array(v.string()),
+    relatedSearches: v.array(v.string()), // YouTube autocomplete expansion
+    bpmMin: v.optional(v.number()),
+    bpmMax: v.optional(v.number()),
+    keys: v.optional(v.array(v.string())),
+    competition: v.optional(v.string()), // qualitative: low | medium | high
+    productionNotes: v.optional(v.string()),
+    overviewText: v.string(), // full markdown overview (the exportable .txt)
+    createdAt: v.number(),
+  }).index("by_slug", ["slug"]),
 
   savedLyrics: defineTable({
     title: v.string(),

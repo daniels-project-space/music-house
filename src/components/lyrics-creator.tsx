@@ -6,6 +6,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 
 export function LyricsCreator() {
   const saved = useQuery(api.savedLyrics.list, {}) ?? [];
+  const niches = useQuery(api.niches.list, {}) ?? [];
   const create = useMutation(api.savedLyrics.create);
   const remove = useMutation(api.savedLyrics.remove);
 
@@ -14,6 +15,7 @@ export function LyricsCreator() {
   const [theme, setTheme] = useState("");
   const [topic, setTopic] = useState("");
   const [genre, setGenre] = useState("");
+  const [nicheSlug, setNicheSlug] = useState("");
   const [generated, setGenerated] = useState<string>("");
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -22,8 +24,8 @@ export function LyricsCreator() {
 
   const generate = async () => {
     setError(null);
-    if (!vibe.trim() && !theme.trim() && !topic.trim() && !genre.trim()) {
-      setError("Need at least one of: vibe, theme, topic, genre");
+    if (!vibe.trim() && !theme.trim() && !topic.trim() && !genre.trim() && !nicheSlug) {
+      setError("Need at least one of: vibe, theme, topic, genre, niche");
       return;
     }
     setGenerating(true);
@@ -37,6 +39,7 @@ export function LyricsCreator() {
           theme: theme.trim() || undefined,
           topic: topic.trim() || undefined,
           genre: genre.trim() || undefined,
+          nicheSlug: nicheSlug || undefined,
         }),
       });
       if (!r.ok) {
@@ -71,6 +74,7 @@ export function LyricsCreator() {
       setTheme("");
       setTopic("");
       setGenre("");
+      setNicheSlug("");
       setGenerated("");
     } catch (e) {
       setError((e as Error).message);
@@ -83,8 +87,35 @@ export function LyricsCreator() {
     <section className="rounded-lg border border-brd bg-card p-4 backdrop-blur">
       <div className="flex items-center justify-between mb-4">
         <p className="label-mono">Lyrics Creator</p>
-        <span className="font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint">Sonnet 4.6</span>
+        <span className="font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint">
+          {nicheSlug ? "Sonnet 4.6 · grounded" : "Sonnet 4.6"}
+        </span>
       </div>
+
+      {niches.length > 0 ? (
+        <div className="flex items-center gap-2 mb-3">
+          <span className="font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint whitespace-nowrap">
+            Ground in niche
+          </span>
+          <select
+            value={nicheSlug}
+            onChange={(e) => {
+              const slug = e.target.value;
+              setNicheSlug(slug);
+              const n = niches.find((x) => x.slug === slug);
+              if (n && !genre.trim()) setGenre(n.primaryGenre);
+            }}
+            className="flex-1 bg-paper/[0.04] border border-brd rounded-md px-2 py-1.5 text-paper text-[0.75rem] focus:outline-none focus:border-purple/50"
+          >
+            <option value="">— freeform (no niche) —</option>
+            {niches.map((n) => (
+              <option key={n._id} value={n.slug}>
+                {n.name} · {n.primaryGenre}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
         <Input value={title} onChange={setTitle} placeholder="Title (optional)" />

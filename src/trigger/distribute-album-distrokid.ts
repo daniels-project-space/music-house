@@ -40,7 +40,22 @@ function lyricsToPlainText(
 export type DistributeAlbumDistrokidInput = {
   jobId: Id<"distributionJobs">;
   dryRun?: boolean;
+  /** Explicit ISO release date (YYYY-MM-DD). Overrides the lead-time default. */
+  releaseDate?: string;
+  /** Days from now to set the release date. Default: env or 21. */
+  leadDays?: number;
 };
+
+// Default release lead time — see distribute-single-distrokid.ts for rationale
+// (preserves the Spotify editorial-pitch / pre-save / Release Radar window).
+const DEFAULT_LEAD_DAYS = 21;
+
+function resolveReleaseDate(input: { releaseDate?: string; leadDays?: number }): string {
+  if (input.releaseDate) return input.releaseDate;
+  const lead = input.leadDays ?? Number(process.env.DISTROKID_RELEASE_LEAD_DAYS ?? DEFAULT_LEAD_DAYS);
+  const days = Number.isFinite(lead) && lead >= 0 ? lead : DEFAULT_LEAD_DAYS;
+  return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+}
 
 // Whole-album DistroKid release. Mirrors distribute-single-distrokid but gathers
 // every live track in the album into one multi-song distroAlbumPayload. The
@@ -171,15 +186,16 @@ export const distributeAlbumDistrokid = task({
       });
     }
 
-    const now = new Date();
+    const releaseDate = resolveReleaseDate(input);
     const stores: DistrokidStoreSelection = { storeIds: [], territories: [] };
     const payload: DistrokidReleasePayload = {
       releaseTitle: album.name,
       artistName,
-      genre: album.genre ?? "Electronic",
+      genre: album.genre ?? "Pop",
+      secondaryGenre: album.secondaryGenre ?? undefined,
       language,
-      releaseDate: now.toISOString().slice(0, 10),
-      copyrightYear: String(now.getUTCFullYear()),
+      releaseDate,
+      copyrightYear: releaseDate.slice(0, 4),
       copyrightName: artistName,
       tracks: dkTracks,
       artwork,

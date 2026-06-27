@@ -1,4 +1,7 @@
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "../../../../../convex/_generated/api";
 import { getServiceSecrets } from "../../../../lib/vault";
+import { nicheGroundingBlock } from "../../../../lib/nichecraft";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -9,6 +12,7 @@ type Body = {
   theme?: string;
   topic?: string;
   genre?: string;
+  nicheSlug?: string;
 };
 
 const SYSTEM = `You are an experienced songwriter. Write lyrics that scan well, have a clear hook, and avoid clichés. Output ONLY the lyrics — no preamble, no commentary, no markdown fences.
@@ -24,9 +28,10 @@ Format the lyrics with section headers in square brackets:
 
 Aim for 2 verses, a chorus that repeats, optionally a bridge. Lines should be singable. Match the genre's typical line length and rhyme density.`;
 
-function buildPrompt(b: Body): string {
+function buildPrompt(b: Body, grounding?: string): string {
   const parts: string[] = [];
   parts.push(`Write a song.`);
+  if (grounding) parts.push(grounding);
   if (b.title) parts.push(`Working title: "${b.title}".`);
   if (b.genre) parts.push(`Genre: ${b.genre}.`);
   if (b.vibe) parts.push(`Vibe / mood: ${b.vibe}.`);
@@ -36,6 +41,21 @@ function buildPrompt(b: Body): string {
   return parts.join("\n");
 }
 
+// Pull the selected niche from Convex and turn it into a compact grounding block.
+async function loadNicheGrounding(nicheSlug?: string): Promise<string | undefined> {
+  if (!nicheSlug) return undefined;
+  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
+  if (!url) return undefined;
+  try {
+    const cx = new ConvexHttpClient(url);
+    const n = await cx.query(api.niches.getBySlug, { slug: nicheSlug });
+    if (!n) return undefined;
+    return nicheGroundingBlock(n);
+  } catch {
+    return undefined;
+  }
+}
+
 export async function POST(req: Request) {
   let body: Body;
   try {
@@ -43,9 +63,11 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: "invalid json" }, { status: 400 });
   }
-  if (!body.vibe && !body.theme && !body.topic && !body.genre) {
-    return Response.json({ error: "need at least one of: vibe, theme, topic, genre" }, { status: 400 });
+  if (!body.vibe && !body.theme && !body.topic && !body.genre && !body.nicheSlug) {
+    return Response.json({ error: "need at least one of: vibe, theme, topic, genre, niche" }, { status: 400 });
   }
+
+  const grounding = await loadNicheGrounding(body.nicheSlug);
 
   const anth = await getServiceSecrets("anthropic").catch(() => ({}) as Record<string, string>);
   const apiKey = anth.ANTHROPIC_API_KEY;
@@ -64,7 +86,7 @@ export async function POST(req: Request) {
       model: "claude-sonnet-4-6",
       max_tokens: 1500,
       system: SYSTEM,
-      messages: [{ role: "user", content: buildPrompt(body) }],
+      messages: [{ role: "user", content: buildPrompt(body, grounding) }],
     }),
   });
   if (!r.ok) {

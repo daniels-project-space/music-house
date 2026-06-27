@@ -5,6 +5,7 @@ import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import Link from "next/link";
 import { LyricsCreator } from "@/components/lyrics-creator";
+import { NicheLab } from "@/components/niche-lab";
 
 type Generator = "suno" | "mureka";
 
@@ -214,6 +215,10 @@ export default function StudioPage() {
             ))}
           </ul>
         </aside>
+      </div>
+
+      <div className="mt-5">
+        <NicheLab />
       </div>
 
       <div className="mt-5">

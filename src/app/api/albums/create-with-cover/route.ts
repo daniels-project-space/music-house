@@ -14,6 +14,8 @@ type Body = {
   style?: string;
   description?: string;
   section?: string;
+  /** Optional niche to source canonical primary/secondary genre from. */
+  nicheSlug?: string;
 };
 
 function slugify(s: string): string {
@@ -117,6 +119,18 @@ export async function POST(req: Request) {
   const slug = body.slug ? slugify(body.slug) : slugify(body.name);
   if (!slug) return Response.json({ error: "could not derive slug" }, { status: 400 });
 
+  // Resolve genres from the niche (if any) so the release clusters correctly on
+  // Spotify. Explicit style wins for the primary genre; secondary comes from niche.
+  let primaryGenre = body.style;
+  let secondaryGenre: string | undefined;
+  if (body.nicheSlug) {
+    const niche = await cx.query(api.niches.getBySlug, { slug: body.nicheSlug }).catch(() => null);
+    if (niche) {
+      primaryGenre = primaryGenre || niche.primaryGenre;
+      secondaryGenre = niche.secondaryGenre ?? undefined;
+    }
+  }
+
   // Generate cover via Flux
   const replicate = await getServiceSecrets("replicate").catch(() => ({}) as Record<string, string>);
   const replicateToken = replicate.REPLICATE_API_TOKEN;
@@ -147,7 +161,9 @@ export async function POST(req: Request) {
     slug,
     name: body.name,
     description: body.description,
-    genre: body.style,
+    genre: primaryGenre,
+    secondaryGenre,
+    nicheSlug: body.nicheSlug,
     coverKey,
     section: body.section,
   });

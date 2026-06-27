@@ -44,7 +44,23 @@ function lyricsToPlainText(
 export type DistributeSingleDistrokidInput = {
   jobId: Id<"distributionJobs">;
   dryRun?: boolean;
+  /** Explicit ISO release date (YYYY-MM-DD). Overrides the lead-time default. */
+  releaseDate?: string;
+  /** Days from now to set the release date. Default: env or 21. A lead time keeps
+   *  the Spotify editorial-pitch + pre-save + Release Radar window open. */
+  leadDays?: number;
 };
+
+// Default release lead time. Spotify wants unreleased tracks pitched >=7 days
+// ahead (via Spotify for Artists); ~3 weeks leaves room to pitch + pre-save.
+const DEFAULT_LEAD_DAYS = 21;
+
+function resolveReleaseDate(input: { releaseDate?: string; leadDays?: number }): string {
+  if (input.releaseDate) return input.releaseDate;
+  const lead = input.leadDays ?? Number(process.env.DISTROKID_RELEASE_LEAD_DAYS ?? DEFAULT_LEAD_DAYS);
+  const days = Number.isFinite(lead) && lead >= 0 ? lead : DEFAULT_LEAD_DAYS;
+  return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+}
 
 export const distributeSingleDistrokid = task({
   id: "distribute-single-distrokid",
@@ -179,9 +195,10 @@ export const distributeSingleDistrokid = task({
     // TODO: source this from a tracks/artist schema field per the metadata-source rule.
     const songwriterLegalName = process.env.DISTROKID_SONGWRITER_LEGAL_NAME ?? "Daniel Broj";
     const language = "en";
-    const now = new Date();
-    const releaseDate = now.toISOString().slice(0, 10);
-    const copyrightYear = String(now.getUTCFullYear());
+    // Future-dated by default — preserves the Spotify editorial-pitch / pre-save /
+    // Release Radar window (immediate releases forfeit all of it).
+    const releaseDate = resolveReleaseDate(input);
+    const copyrightYear = releaseDate.slice(0, 4);
 
     // AI disclosure from the track (schema: { isAi, tools? } → CLI: { usedAi, details? }).
     const aiDisclosure = {
@@ -210,10 +227,17 @@ export const distributeSingleDistrokid = task({
       },
     };
 
+    // Genre drives Spotify's listener clustering. Prefer the track genre, then the
+    // album's (niche-sourced) genre; only fall back to a neutral default. Pass the
+    // secondary genre through too — it sharpens the recommendation target.
+    const primaryGenre = track.genre ?? releaseAlbum?.genre ?? "Pop";
+    const secondaryGenre = releaseAlbum?.secondaryGenre ?? undefined;
+
     const payload: DistrokidReleasePayload = {
       releaseTitle: track.title,
       artistName,
-      genre: track.genre ?? "Electronic",
+      genre: primaryGenre,
+      secondaryGenre,
       language,
       releaseDate,
       copyrightYear,
