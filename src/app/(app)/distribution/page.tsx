@@ -12,6 +12,7 @@ export default function DistributionPage() {
   const artists = useQuery(api.artists.list, {}) ?? [];
   const setDistributed = useMutation(api.tracks.setDistributed);
   const setComplete = useMutation(api.distribution.setComplete);
+  const setStreamingIds = useMutation(api.artists.setStreamingIds);
   const [busy, setBusy] = useState<string | null>(null);
   const [distributor, setDistributor] = useState<"routenote" | "distrokid">("distrokid");
   const analytics = useQuery(api.distributorAnalytics.latest, { distributor: "distrokid" });
@@ -27,6 +28,38 @@ export default function DistributionPage() {
   const [pitchText, setPitchText] = useState("");
   const [pitchLoading, setPitchLoading] = useState(false);
   const [pitchErr, setPitchErr] = useState<string | null>(null);
+
+  // Release lead time (DistroKid) — days ahead to date the release. A future date
+  // keeps the editorial-pitch / pre-save / Release Radar window open.
+  const [leadDays, setLeadDays] = useState(21);
+
+  // Inline "pin Spotify artist ID" on the continuity guard.
+  const [pinInputs, setPinInputs] = useState<Record<string, string>>({});
+  const [pinBusy, setPinBusy] = useState<string | null>(null);
+
+  // Accept a full Spotify artist URL or a bare 22-char id; extract the id.
+  const parseSpotifyArtistId = (raw: string): string | null => {
+    const s = raw.trim();
+    const m = s.match(/artist[/:]([A-Za-z0-9]{22})/) ?? s.match(/^([A-Za-z0-9]{22})$/);
+    return m ? m[1] : null;
+  };
+
+  const pinArtist = async (slug: string) => {
+    const id = parseSpotifyArtistId(pinInputs[slug] ?? "");
+    if (!id) {
+      alert("Paste a Spotify artist URL or 22-char id");
+      return;
+    }
+    setPinBusy(slug);
+    try {
+      await setStreamingIds({ slug, spotifyArtistId: id });
+      setPinInputs((p) => ({ ...p, [slug]: "" }));
+    } catch (e) {
+      alert(`Failed: ${(e as Error).message}`);
+    } finally {
+      setPinBusy(null);
+    }
+  };
 
   const openPitch = async (t: PitchTarget) => {
     setPitchTarget(t);
@@ -85,7 +118,7 @@ export default function DistributionPage() {
       const r = await fetch("/api/distribute", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ trackId, distributor }),
+        body: JSON.stringify({ trackId, distributor, leadDays }),
       });
       if (!r.ok) alert(`Failed to start: ${await r.text()}`);
     } catch (e) {
@@ -157,10 +190,22 @@ export default function DistributionPage() {
               : "no snapshot yet — hit refresh"}
             {analytics?.streamsPending ? " · ingestion pending" : ""}
           </span>
+          <label className="ml-auto flex items-center gap-1.5" title="Days ahead to date the release — keeps the Spotify pitch / pre-save / Release Radar window open">
+            <span className="font-mono text-[0.5rem] uppercase tracking-[0.16em] text-paper-faint">Release in</span>
+            <input
+              type="number"
+              min={0}
+              max={365}
+              value={leadDays}
+              onChange={(e) => setLeadDays(Math.max(0, Math.min(365, Number(e.target.value) || 0)))}
+              className="w-12 bg-paper/[0.04] border border-brd rounded px-1.5 py-0.5 text-[0.7rem] text-t1 text-center tabular-nums outline-none focus:border-purple/50"
+            />
+            <span className="font-mono text-[0.5rem] uppercase tracking-[0.16em] text-paper-faint">days</span>
+          </label>
           <button
             onClick={refreshAnalytics}
             disabled={refreshing}
-            className="ml-auto font-mono text-[0.55rem] uppercase tracking-[0.14em] px-2.5 py-1 rounded border text-cyan hover:bg-cyan/[0.06] transition-colors disabled:opacity-40"
+            className="font-mono text-[0.55rem] uppercase tracking-[0.14em] px-2.5 py-1 rounded border text-cyan hover:bg-cyan/[0.06] transition-colors disabled:opacity-40"
             style={{ borderColor: "rgba(6,182,212,0.4)" }}
           >
             {refreshing ? "Queueing…" : "Refresh stats"}
@@ -176,20 +221,36 @@ export default function DistributionPage() {
           <p className="font-display text-[0.82rem] font-bold text-red mb-1">
             ⚠ {unpinned.length} artist{unpinned.length > 1 ? "s" : ""} need a pinned Spotify profile
           </p>
-          <p className="text-[0.74rem] text-paper-dim leading-relaxed">
-            {unpinned.map((a) => a.name).join(", ")} released on DistroKid but ha
-            {unpinned.length > 1 ? "ve" : "s"} no Spotify artist ID set. Claim the profile in{" "}
-            <a
-              href="https://artists.spotify.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-cyan underline"
-            >
+          <p className="text-[0.74rem] text-paper-dim leading-relaxed mb-3">
+            Claim each profile in{" "}
+            <a href="https://artists.spotify.com" target="_blank" rel="noopener noreferrer" className="text-cyan underline">
               Spotify for Artists
             </a>
-            , then paste the artist ID in Library → album → edit <em>before the next release</em> — otherwise
-            DistroKid can create a duplicate profile (splits streams, resets followers, breaks Release Radar).
+            , then paste the artist URL/ID below <em>before the next release</em> — otherwise DistroKid can create a
+            duplicate profile (splits streams, resets followers, breaks Release Radar).
           </p>
+          <div className="space-y-1.5">
+            {unpinned.map((a) => (
+              <div key={a.slug} className="flex items-center gap-2">
+                <span className="font-display text-[0.74rem] text-paper w-32 truncate shrink-0">{a.name}</span>
+                <input
+                  value={pinInputs[a.slug] ?? ""}
+                  onChange={(e) => setPinInputs((p) => ({ ...p, [a.slug]: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === "Enter") pinArtist(a.slug); }}
+                  placeholder="open.spotify.com/artist/… or 22-char id"
+                  className="flex-1 bg-paper/[0.04] border border-brd rounded px-2 py-1 text-[0.72rem] text-t1 outline-none focus:border-red/50"
+                />
+                <button
+                  onClick={() => pinArtist(a.slug)}
+                  disabled={pinBusy === a.slug || !(pinInputs[a.slug] ?? "").trim()}
+                  className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2.5 py-1 rounded border disabled:opacity-40"
+                  style={{ borderColor: "rgba(29,185,84,0.5)", color: "#1db954" }}
+                >
+                  {pinBusy === a.slug ? "…" : "Pin"}
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
 
@@ -199,7 +260,7 @@ export default function DistributionPage() {
             Spotify algorithmic checklist (get into shuffle / Radio / Discover Weekly)
           </summary>
           <ul className="mt-2.5 space-y-1.5 text-[0.74rem] text-paper-dim leading-relaxed list-disc pl-4">
-            <li>Releases are auto-dated ~21 days out so the pitch window stays open (env <code className="text-cyan">DISTROKID_RELEASE_LEAD_DAYS</code>).</li>
+            <li>Set the <strong>“Release in N days”</strong> control above (default 21) so the release is future-dated and the pitch window stays open.</li>
             <li>Pitch every release in Spotify for Artists <strong>≥7 days before</strong> release date — use the “♪ Pitch” button on each release to generate the copy.</li>
             <li>Pin the Spotify artist ID after the first release so all releases land on one profile (Release Radar continuity).</li>
             <li>Consider enrolling tracks in <strong>Discovery Mode</strong> (S4A) — boosts Radio/autoplay for a royalty trade-off.</li>

@@ -14,16 +14,17 @@ export const maxDuration = 60;
 
 type Body = { artistSlug?: string; albumSlug?: string; title?: string };
 
-const SYSTEM = `You are a music marketer writing a Spotify for Artists playlist pitch. Given the release context, output a ready-to-paste pitch with EXACTLY these labelled sections (plain text, no markdown fences):
+const SYSTEM = `You are a release manager writing a Spotify for Artists playlist pitch. Spotify editors skim hundreds daily and the data here also feeds the algorithm (Release Radar / Discover Weekly targeting), so every tag must be accurate to the actual track. Output a ready-to-paste pitch with EXACTLY these labelled sections (plain text, no markdown, no preamble):
 
-GENRES: up to 3 comma-separated genres
+GENRES: up to 3 comma-separated genres (most specific first)
 MOODS: 3-5 comma-separated moods
-STYLES: 3-5 comma-separated style/sub-genre tags
-INSTRUMENTS: 3-6 comma-separated key instruments
-SIMILAR ARTISTS: 3-5 comma-separated reference artists (for the editor's context only)
-PITCH: a single compelling paragraph of AT MOST 500 characters aimed at a playlist editor — the story, the hook, the target listener and listening moment. First person, confident, specific, no hype clichés.
+STYLES: 3-5 comma-separated style/sub-genre/era tags
+INSTRUMENTS: 3-6 comma-separated key instruments/sounds that define the track
+SIMILAR ARTISTS: 3-5 comma-separated reference artists whose listeners would like this (editor context only — never claim affiliation)
+PLAYLIST FIT: 2-3 comma-separated types of playlists or listening moments this slots into (e.g. "late-night focus, rainy-day indie, gym warmup")
+PITCH: ONE paragraph, HARD LIMIT 500 characters, first person. Lead with the single strongest hook, then the target listener + the moment they'd press play. Specific and confident. No hype clichés ("must-listen", "next big thing"), no invented stats, no emoji.
 
-Keep it tight and accurate to the release. Do not invent streaming stats.`;
+Be concrete and faithful to the release context. If a detail is unknown, omit it rather than inventing.`;
 
 export async function POST(req: Request) {
   let body: Body;
@@ -54,6 +55,7 @@ export async function POST(req: Request) {
   const genre = album?.genre ?? (artist?.genres ?? [])[0];
   if (genre) ctx.push(`Primary genre: ${genre}.`);
   if (album?.secondaryGenre) ctx.push(`Secondary genre: ${album.secondaryGenre}.`);
+  if (artist?.genres?.length) ctx.push(`Artist genres: ${artist.genres.join(", ")}.`);
   if (album?.description) ctx.push(`Description: ${album.description}.`);
   if (niche) {
     ctx.push(`Niche: ${niche.name}.`);

@@ -12,7 +12,12 @@ type Distributor = "routenote" | "distrokid";
 // Legacy /api/distribute alias — forwards to the new single-distribute path so existing
 // callers don't break. New UI code calls /api/distribute/single or /api/distribute/album.
 export async function POST(req: Request) {
-  const body = (await req.json()) as { trackId?: string; distributor?: string };
+  const body = (await req.json()) as {
+    trackId?: string;
+    distributor?: string;
+    leadDays?: number;
+    releaseDate?: string;
+  };
   if (!body.trackId) return Response.json({ error: "trackId required" }, { status: 400 });
 
   // Default to RouteNote so existing callers that omit `distributor` behave exactly as before.
@@ -30,9 +35,19 @@ export async function POST(req: Request) {
     distributor,
   });
 
+  // Release timing (DistroKid only) — a lead time keeps the Spotify editorial-pitch
+  // / pre-save / Release Radar window open. Falls back to the task's env/default.
+  const timing: { leadDays?: number; releaseDate?: string } = {};
+  if (typeof body.leadDays === "number" && Number.isFinite(body.leadDays) && body.leadDays >= 0) {
+    timing.leadDays = Math.round(body.leadDays);
+  }
+  if (typeof body.releaseDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.releaseDate)) {
+    timing.releaseDate = body.releaseDate;
+  }
+
   const handle =
     distributor === "distrokid"
-      ? await tasks.trigger<typeof distributeSingleDistrokid>("distribute-single-distrokid", { jobId })
+      ? await tasks.trigger<typeof distributeSingleDistrokid>("distribute-single-distrokid", { jobId, ...timing })
       : await tasks.trigger<typeof distributeSingle>("distribute-single", { jobId });
 
   return Response.json({ jobId, runId: handle.id, releaseType: "single", distributor });
