@@ -6,12 +6,11 @@
     "dev": "next dev",
     "dev:convex": "convex dev",
     "build:next": "next build",
-    "build": "next build",
+    "build": "convex deploy --cmd 'next build'",
     "start": "next start",
     "lint": "eslint",
     "trigger:dev": "trigger.dev dev",
-    "trigger:deploy": "trigger.dev deploy",
-    "build:convex": "convex deploy --cmd 'next build'"
+    "trigger:deploy": "trigger.dev deploy"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.74",
