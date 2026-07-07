@@ -58,9 +58,21 @@ export default defineSchema({
     generator: v.union(v.literal("suno"), v.literal("mureka"), v.literal("import")),
     audioKey: v.string(),
     flacKey: v.optional(v.string()),
-    instrumentalKey: v.optional(v.string()), // cached vocals-removed stem (karaoke)
+    instrumentalKey: v.optional(v.string()), // cached vocals-removed stem (backing track / karaoke)
+    vocalKey: v.optional(v.string()), // cached isolated-vocal stem (companion to instrumentalKey)
     sunoTaskId: v.optional(v.string()), // Suno generation task id (native stems)
     sunoAudioId: v.optional(v.string()), // Suno clip/audio id (native stems)
+    // Async WAV-upgrade bookkeeping: when Suno's WAV export is slow/stuck we save
+    // the MP3 immediately (audioKey = .mp3) and flag the track for a later upgrade.
+    // The upgrade-wav scheduled task polls these, swaps audioKey to the .wav, and
+    // clears the flag. Capped via wavUpgradeAttempts so we give up gracefully.
+    needsWavUpgrade: v.optional(v.boolean()),
+    wavUpgradeAttempts: v.optional(v.number()),
+    // Karaoke lyric-alignment bookkeeping: tracks whose lyric lines all have
+    // start=0 are picked up by the align-lyrics scheduled task, which fetches
+    // Suno's word-level timestamps and stamps real per-line starts. Capped via
+    // lyricAlignAttempts so we give up gracefully when alignment is unavailable.
+    lyricAlignAttempts: v.optional(v.number()),
     seedUrl: v.optional(v.string()), // streaming-link seed (e.g. Spotify URL) for resolveLinks
     coverKey: v.optional(v.string()),
     lyrics: v.optional(v.array(v.object({
@@ -86,7 +98,10 @@ export default defineSchema({
   })
     .index("by_artist_album", ["artistSlug", "albumSlug"])
     .index("by_artist", ["artistSlug"])
-    .index("by_generator", ["generator"]),
+    .index("by_generator", ["generator"])
+    // Lets the upgrade-wav poller read only the handful of pending tracks instead
+    // of `.filter().collect()`-ing the whole (fat lyrics[]) tracks table each run.
+    .index("by_wav_upgrade", ["needsWavUpgrade"]),
 
   hearts: defineTable({
     trackId: v.id("tracks"),

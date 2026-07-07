@@ -36,16 +36,110 @@ export const insert = mutation({
     generator: v.union(v.literal("suno"), v.literal("mureka"), v.literal("import")),
     audioKey: v.string(),
     flacKey: v.optional(v.string()),
+    instrumentalKey: v.optional(v.string()),
+    vocalKey: v.optional(v.string()),
     coverKey: v.optional(v.string()),
     lyrics: v.optional(v.array(v.object({ text: v.string(), start: v.number(), isSection: v.boolean() }))),
     clapScore: v.optional(v.number()),
     clapBestMatch: v.optional(v.string()),
     sunoTaskId: v.optional(v.string()),
     sunoAudioId: v.optional(v.string()),
+    needsWavUpgrade: v.optional(v.boolean()),
+    wavUpgradeAttempts: v.optional(v.number()),
+    lyricAlignAttempts: v.optional(v.number()),
     seedUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) =>
     ctx.db.insert("tracks", { ...args, distributed: false, createdAt: Date.now() }),
+});
+
+// Tracks saved as MP3 because Suno's WAV export was slow/stuck at generation time.
+// The upgrade-wav scheduled task polls this and tries to swap in the lossless WAV.
+export const needingWavUpgrade = query({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("tracks")
+      // PERF: index the pending set instead of full-scanning the fat tracks table
+      // (this runs on a poller several times/hour). Result-equivalent to the old
+      // `.filter(needsWavUpgrade === true)`.
+      .withIndex("by_wav_upgrade", (q) => q.eq("needsWavUpgrade", true))
+      .collect();
+    // Round-robin fairness: serve least-attempted first, then oldest. Without
+    // this the cron's slice(0, MAX_PER_RUN) always re-hit the same first rows in
+    // insertion order, so one take got hammered (24 attempts) while another sat
+    // at 0. Least-attempted-first guarantees every pending track gets a turn.
+    return rows.sort((a, b) => {
+      const ax = a.wavUpgradeAttempts ?? 0;
+      const bx = b.wavUpgradeAttempts ?? 0;
+      if (ax !== bx) return ax - bx;
+      return (a.createdAt ?? 0) - (b.createdAt ?? 0);
+    });
+  },
+});
+
+// WAV finally readied: swap audioKey to the lossless WAV and clear the flag.
+export const upgradeAudioToWav = mutation({
+  args: { trackId: v.id("tracks"), wavKey: v.string() },
+  handler: async (ctx, { trackId, wavKey }) =>
+    ctx.db.patch(trackId, { audioKey: wavKey, needsWavUpgrade: false }),
+});
+
+// WAV still not ready: record the attempt. After the cap (48 ≈ 16h at 20-min
+// cadence) give up gracefully and keep the MP3 — the track stays playable.
+export const bumpWavUpgradeAttempt = mutation({
+  args: { trackId: v.id("tracks"), attempts: v.number() },
+  handler: async (ctx, { trackId, attempts }) => {
+    const patch: { wavUpgradeAttempts: number; needsWavUpgrade?: boolean } = {
+      wavUpgradeAttempts: attempts,
+    };
+    if (attempts >= 48) patch.needsWavUpgrade = false;
+    await ctx.db.patch(trackId, patch);
+  },
+});
+
+// ── Karaoke lyric alignment (self-healing backfill) ──────────────────────
+// Tracks that HAVE lyric lines but every line's start is 0 (the unaligned
+// parseLyrics fallback) AND still carry the Suno ids needed to re-fetch
+// word-level timestamps. The align-lyrics scheduled task picks these up.
+// Capped via lyricAlignAttempts so we stop trying when alignment is genuinely
+// unavailable (e.g. instrumental, or model/plan without timestamp support).
+const LYRIC_ALIGN_ATTEMPT_CAP = 24;
+
+export const needingLyricAlignment = query({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db.query("tracks").collect();
+    return all.filter(
+      (t) =>
+        Array.isArray(t.lyrics) &&
+        t.lyrics.length > 0 &&
+        t.lyrics.every((l) => (l.start ?? 0) === 0) &&
+        !!t.sunoTaskId &&
+        !!t.sunoAudioId &&
+        (t.lyricAlignAttempts ?? 0) < LYRIC_ALIGN_ATTEMPT_CAP,
+    );
+  },
+});
+
+// Alignment succeeded: replace the lyric lines with the karaoke-ready (real
+// per-line start) version and clear the attempt counter.
+export const setAlignedLyrics = mutation({
+  args: {
+    trackId: v.id("tracks"),
+    lyrics: v.array(v.object({ text: v.string(), start: v.number(), isSection: v.boolean() })),
+  },
+  handler: async (ctx, { trackId, lyrics }) =>
+    ctx.db.patch(trackId, { lyrics, lyricAlignAttempts: 0 }),
+});
+
+// Alignment unavailable this run: record the attempt. After the cap, the
+// needingLyricAlignment filter stops returning the track (give up gracefully —
+// lyrics stay readable, just not karaoke-synced).
+export const bumpLyricAlignAttempt = mutation({
+  args: { trackId: v.id("tracks"), attempts: v.number() },
+  handler: async (ctx, { trackId, attempts }) =>
+    ctx.db.patch(trackId, { lyricAlignAttempts: attempts }),
 });
 
 export const setNotes = mutation({
