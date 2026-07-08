@@ -73,6 +73,9 @@ export default defineSchema({
     // Suno's word-level timestamps and stamps real per-line starts. Capped via
     // lyricAlignAttempts so we give up gracefully when alignment is unavailable.
     lyricAlignAttempts: v.optional(v.number()),
+    // Indexed pending-set flag for the align-lyrics poller (mirrors needsWavUpgrade):
+    // true when lyrics exist but are all start=0, Suno ids present, attempts < cap.
+    needsLyricAlign: v.optional(v.boolean()),
     seedUrl: v.optional(v.string()), // streaming-link seed (e.g. Spotify URL) for resolveLinks
     coverKey: v.optional(v.string()),
     lyrics: v.optional(v.array(v.object({
@@ -101,7 +104,9 @@ export default defineSchema({
     .index("by_generator", ["generator"])
     // Lets the upgrade-wav poller read only the handful of pending tracks instead
     // of `.filter().collect()`-ing the whole (fat lyrics[]) tracks table each run.
-    .index("by_wav_upgrade", ["needsWavUpgrade"]),
+    .index("by_wav_upgrade", ["needsWavUpgrade"])
+    // Same trick for the align-lyrics poller: read only the flagged pending set.
+    .index("by_lyric_align", ["needsLyricAlign"]),
 
   hearts: defineTable({
     trackId: v.id("tracks"),

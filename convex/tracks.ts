@@ -1,4 +1,4 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 
 export const list = query({
@@ -50,7 +50,12 @@ export const insert = mutation({
     seedUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) =>
-    ctx.db.insert("tracks", { ...args, distributed: false, createdAt: Date.now() }),
+    ctx.db.insert("tracks", {
+      ...args,
+      distributed: false,
+      createdAt: Date.now(),
+      needsLyricAlign: computeNeedsLyricAlign(args),
+    }),
 });
 
 // Tracks saved as MP3 because Suno's WAV export was slow/stuck at generation time.
@@ -106,20 +111,54 @@ export const bumpWavUpgradeAttempt = mutation({
 // unavailable (e.g. instrumental, or model/plan without timestamp support).
 const LYRIC_ALIGN_ATTEMPT_CAP = 24;
 
-export const needingLyricAlignment = query({
+// Single source of truth for the "needs karaoke alignment" predicate. The indexed
+// `needsLyricAlign` flag is maintained (at insert/setLyrics/setAlignedLyrics/
+// bumpLyricAlignAttempt) to equal this exactly, so the poller can read the flagged
+// set via index instead of full-scanning the fat (lyrics[]) tracks table.
+function computeNeedsLyricAlign(t: {
+  lyrics?: { text: string; start: number; isSection: boolean }[];
+  sunoTaskId?: string;
+  sunoAudioId?: string;
+  lyricAlignAttempts?: number;
+}): boolean {
+  return (
+    Array.isArray(t.lyrics) &&
+    t.lyrics.length > 0 &&
+    t.lyrics.every((l) => (l.start ?? 0) === 0) &&
+    !!t.sunoTaskId &&
+    !!t.sunoAudioId &&
+    (t.lyricAlignAttempts ?? 0) < LYRIC_ALIGN_ATTEMPT_CAP
+  );
+}
+
+// One-time backfill of needsLyricAlign for tracks created before the flag existed.
+// Idempotent — run once via `convex run tracks:backfillLyricAlign`.
+export const backfillLyricAlign = internalMutation({
   args: {},
   handler: async (ctx) => {
     const all = await ctx.db.query("tracks").collect();
-    return all.filter(
-      (t) =>
-        Array.isArray(t.lyrics) &&
-        t.lyrics.length > 0 &&
-        t.lyrics.every((l) => (l.start ?? 0) === 0) &&
-        !!t.sunoTaskId &&
-        !!t.sunoAudioId &&
-        (t.lyricAlignAttempts ?? 0) < LYRIC_ALIGN_ATTEMPT_CAP,
-    );
+    let updated = 0;
+    for (const t of all) {
+      const want = computeNeedsLyricAlign(t);
+      if ((t.needsLyricAlign ?? false) !== want) {
+        await ctx.db.patch(t._id, { needsLyricAlign: want });
+        updated++;
+      }
+    }
+    return { total: all.length, updated };
   },
+});
+
+export const needingLyricAlignment = query({
+  args: {},
+  handler: async (ctx) =>
+    // PERF: index the pending set instead of full-scanning the fat tracks table
+    // each hourly run. Result-equivalent to the old `.collect().filter(...)`
+    // because `needsLyricAlign` === computeNeedsLyricAlign (maintained at writes).
+    ctx.db
+      .query("tracks")
+      .withIndex("by_lyric_align", (q) => q.eq("needsLyricAlign", true))
+      .collect(),
 });
 
 // Alignment succeeded: replace the lyric lines with the karaoke-ready (real
@@ -130,7 +169,8 @@ export const setAlignedLyrics = mutation({
     lyrics: v.array(v.object({ text: v.string(), start: v.number(), isSection: v.boolean() })),
   },
   handler: async (ctx, { trackId, lyrics }) =>
-    ctx.db.patch(trackId, { lyrics, lyricAlignAttempts: 0 }),
+    // aligned now (real per-line starts) → clears the indexed pending flag
+    ctx.db.patch(trackId, { lyrics, lyricAlignAttempts: 0, needsLyricAlign: false }),
 });
 
 // Alignment unavailable this run: record the attempt. After the cap, the
@@ -138,8 +178,14 @@ export const setAlignedLyrics = mutation({
 // lyrics stay readable, just not karaoke-synced).
 export const bumpLyricAlignAttempt = mutation({
   args: { trackId: v.id("tracks"), attempts: v.number() },
-  handler: async (ctx, { trackId, attempts }) =>
-    ctx.db.patch(trackId, { lyricAlignAttempts: attempts }),
+  handler: async (ctx, { trackId, attempts }) => {
+    const patch: { lyricAlignAttempts: number; needsLyricAlign?: boolean } = {
+      lyricAlignAttempts: attempts,
+    };
+    // hit the cap → give up gracefully; drop out of the indexed pending set
+    if (attempts >= LYRIC_ALIGN_ATTEMPT_CAP) patch.needsLyricAlign = false;
+    await ctx.db.patch(trackId, patch);
+  },
 });
 
 export const setNotes = mutation({
@@ -167,7 +213,11 @@ export const setLyrics = mutation({
     id: v.id("tracks"),
     lyrics: v.array(v.object({ text: v.string(), start: v.number(), isSection: v.boolean() })),
   },
-  handler: async (ctx, { id, lyrics }) => ctx.db.patch(id, { lyrics }),
+  handler: async (ctx, { id, lyrics }) => {
+    const t = await ctx.db.get(id);
+    const needsLyricAlign = t ? computeNeedsLyricAlign({ ...t, lyrics }) : false;
+    await ctx.db.patch(id, { lyrics, needsLyricAlign });
+  },
 });
 
 
