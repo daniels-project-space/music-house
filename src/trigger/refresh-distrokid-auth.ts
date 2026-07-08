@@ -86,7 +86,11 @@ async function performKeepAlive(runId: string): Promise<{
   const cx = convexClient();
   const auth = await cx.query(api.distributorAuth.get, { distributor: "distrokid" });
   if (!auth?.cookiesJson) {
-    throw new Error("DISTROKID_REAUTH_NEEDED: no cookies in distributorAuth — seed cookies once first");
+    // DistroKid is not configured yet (inert integration — RouteNote is the live
+    // distribution path). Skip cleanly instead of throwing every 8h; auto-resumes
+    // once cookies are seeded. Avoids a failed run + retry noise on every tick.
+    log("no cookies in distributorAuth — DistroKid not configured, skipping keepalive");
+    return { ok: true, cookieCount: 0, beefHoursBefore: null, beefHoursAfter: null };
   }
   const cookies = JSON.parse(auth.cookiesJson) as CookieEntry[];
   const beefHoursBefore = beefExpiryHours(cookies);

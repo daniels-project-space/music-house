@@ -30,7 +30,12 @@ async function runAnalyticsPull(convexUrlOverride?: string) {
   const cx = new ConvexHttpClient(convexUrl);
 
   const auth = await cx.query(api.distributorAuth.get, { distributor: "distrokid" });
-  if (!auth?.cookiesJson) throw new Error("no DistroKid auth cookies — paste cookies first");
+  if (!auth?.cookiesJson) {
+    // DistroKid not configured yet (inert integration). Skip cleanly instead of
+    // throwing every 2 days; auto-resumes once cookies are seeded.
+    logger.info("dk:analytics: no DistroKid cookies — not configured, skipping");
+    return;
+  }
   const cookies = JSON.parse(auth.cookiesJson) as CookieEntry[];
 
   const log = (msg: string) => logger.info("dk:analytics: " + msg);
