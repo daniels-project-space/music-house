@@ -222,6 +222,22 @@ export const setInstrumentalKey = mutation({
   },
 });
 
+/** Cache both native stems (instrumental backing track + isolated vocal). */
+export const setStems = mutation({
+  args: {
+    trackId: v.id("tracks"),
+    instrumentalKey: v.optional(v.string()),
+    vocalKey: v.optional(v.string()),
+  },
+  handler: async (ctx, { trackId, instrumentalKey, vocalKey }) => {
+    const patch: { instrumentalKey?: string; vocalKey?: string } = {};
+    if (instrumentalKey !== undefined) patch.instrumentalKey = instrumentalKey;
+    if (vocalKey !== undefined) patch.vocalKey = vocalKey;
+    await ctx.db.patch(trackId, patch);
+    return { ok: true };
+  },
+});
+
 /** Backfill a track's live Suno generation IDs (enables native stem separation). */
 export const setSunoIds = mutation({
   args: { trackId: v.id("tracks"), sunoTaskId: v.string(), sunoAudioId: v.string() },

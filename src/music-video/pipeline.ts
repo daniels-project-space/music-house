@@ -224,17 +224,18 @@ export async function prepareRender(
         });
       }
     }
-    const instKey = await ensureInstrumental({
+    const { instrumentalKey: instKey, vocalKey } = await ensureInstrumental({
       sunoTaskId,
       sunoAudioId,
       cachedKey: track.instrumentalKey,
       destKey,
       log,
     });
-    if (instKey !== track.instrumentalKey) {
-      await convex.mutation(api.musicVideo.setInstrumentalKey, {
+    if (instKey !== track.instrumentalKey || vocalKey) {
+      await convex.mutation(api.musicVideo.setStems, {
         trackId: inputs.track.id,
         instrumentalKey: instKey,
+        vocalKey,
       });
     }
     audioPath = path.join(workDir, "instrumental.mp3");

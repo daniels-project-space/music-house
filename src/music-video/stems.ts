@@ -92,23 +92,58 @@ export type EnsureInstrumentalArgs = {
   sunoAudioId?: string | null;
   /** track.instrumentalKey — only honoured as a cache when it equals destKey. */
   cachedKey?: string | null;
-  /** Deterministic R2 key the native instrumental is stored at. */
+  /**
+   * Deterministic R2 key prefix the native stems are stored at. The instrumental
+   * is saved at `${destKey}` for backwards compatibility (existing callers pass a
+   * full ".mp3" key); the vocal stem is derived from the same prefix by swapping
+   * the "-instrumental" segment for "-vocal" (or appending it). The actual file
+   * extension follows the URL the provider returns.
+   */
   destKey: string;
   log: (m: string) => void;
 };
 
+export type EnsureInstrumentalResult = {
+  /** R2 key of the instrumental (backing-track) stem. */
+  instrumentalKey: string;
+  /** R2 key of the isolated vocal stem, when the provider returned one. */
+  vocalKey?: string;
+};
+
+/** Derive a file extension from a stem URL; falls back to mp3 (provider default). */
+function extFromUrl(url: string, fallback = "mp3"): string {
+  const m = /\.([a-z0-9]+)(?:\?|#|$)/i.exec(url);
+  const ext = m?.[1]?.toLowerCase();
+  return ext && ext.length <= 4 ? ext : fallback;
+}
+
+const CONTENT_TYPE_BY_EXT: Record<string, string> = {
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  flac: "audio/flac",
+  m4a: "audio/mp4",
+  ogg: "audio/ogg",
+};
+
 /**
- * Ensure a clean Suno-native instrumental exists; returns its R2 key.
- * Reuses destKey if already separated. Any legacy (non-native) instrumentalKey
- * is ignored so we never reuse a Demucs stem. Throws NoStemSourceError when
- * there is neither a cached native stem nor usable Suno IDs.
+ * Ensure clean Suno-native stems exist; returns the instrumental key (always)
+ * plus the vocal key when the provider returns one.
+ * Reuses destKey for the instrumental if already separated. Any legacy
+ * (non-native) instrumentalKey is ignored so we never reuse a Demucs stem.
+ * Throws NoStemSourceError when there is neither a cached native stem nor
+ * usable Suno IDs.
+ *
+ * Note: the sunoapi.org vocal-removal endpoint does not expose a WAV/format
+ * option for stems, so stems are saved in whatever format the provider returns
+ * (mp3). WAV stems are a provider limitation, not a code one. The main track
+ * audio is unaffected and remains lossless WAV.
  */
-export async function ensureInstrumental(args: EnsureInstrumentalArgs): Promise<string> {
+export async function ensureInstrumental(args: EnsureInstrumentalArgs): Promise<EnsureInstrumentalResult> {
   const { sunoTaskId, sunoAudioId, cachedKey, destKey, log } = args;
 
   if (cachedKey === destKey && (await exists(destKey).catch(() => false))) {
     log(`suno instrumental cached: ${destKey}`);
-    return destKey;
+    return { instrumentalKey: destKey };
   }
   if (!sunoTaskId || !sunoAudioId) {
     throw new NoStemSourceError(
@@ -139,6 +174,7 @@ export async function ensureInstrumental(args: EnsureInstrumentalArgs): Promise<
 
   const deadline = Date.now() + 8 * 60 * 1000;
   let instUrl = "";
+  let vocalUrl = "";
   while (Date.now() < deadline) {
     await sleep(5000);
     const r = await fetch(
@@ -150,7 +186,12 @@ export async function ensureInstrumental(args: EnsureInstrumentalArgs): Promise<
     const flag = String(data.successFlag ?? data.status ?? "").toUpperCase();
     log(`suno stems: ${flag || "pending"}`);
     if (flag === "SUCCESS") {
-      instUrl = data?.response?.instrumentalUrl ?? data?.response?.instrumental_url ?? "";
+      const resp = data?.response ?? {};
+      // sunoapi returns the backing track under instrumentalUrl/vocalRemovalUrl
+      // and the isolated voice under vocalUrl/originUrl (snake_case variants too).
+      instUrl =
+        resp.instrumentalUrl ?? resp.instrumental_url ?? resp.vocalRemovalUrl ?? resp.vocal_removal_url ?? "";
+      vocalUrl = resp.vocalUrl ?? resp.vocal_url ?? resp.originUrl ?? resp.origin_url ?? "";
       break;
     }
     if (flag.includes("FAIL") || flag === "ERROR" || flag.includes("SENSITIVE")) {
@@ -159,8 +200,33 @@ export async function ensureInstrumental(args: EnsureInstrumentalArgs): Promise<
   }
   if (!instUrl) throw new Error("suno stems: timed out / no instrumentalUrl");
 
-  const buf = Buffer.from(await (await fetch(instUrl)).arrayBuffer());
-  await put(destKey, buf, "audio/mpeg");
+  // Instrumental: keep destKey as the canonical key (callers persist it). Save
+  // the bytes with a content type matching the returned format.
+  const instExt = extFromUrl(instUrl);
+  const instBuf = Buffer.from(await (await fetch(instUrl)).arrayBuffer());
+  await put(destKey, instBuf, CONTENT_TYPE_BY_EXT[instExt] ?? "audio/mpeg");
   log(`suno instrumental stored: ${destKey}`);
-  return destKey;
+
+  const result: EnsureInstrumentalResult = { instrumentalKey: destKey };
+
+  // Vocal stem: best-effort. Derive a key alongside the instrumental so both
+  // stems live together; persist whatever succeeds without failing the step.
+  if (vocalUrl) {
+    try {
+      const vocalExt = extFromUrl(vocalUrl);
+      const vocalKey = destKey.includes("-instrumental")
+        ? destKey.replace("-instrumental", "-vocal").replace(/\.[a-z0-9]+$/i, `.${vocalExt}`)
+        : destKey.replace(/(\.[a-z0-9]+)?$/i, `-vocal.${vocalExt}`);
+      const vocalBuf = Buffer.from(await (await fetch(vocalUrl)).arrayBuffer());
+      await put(vocalKey, vocalBuf, CONTENT_TYPE_BY_EXT[vocalExt] ?? "audio/mpeg");
+      result.vocalKey = vocalKey;
+      log(`suno vocal stem stored: ${vocalKey}`);
+    } catch (e) {
+      log(`suno vocal stem save failed (non-fatal): ${String(e).slice(0, 160)}`);
+    }
+  } else {
+    log("suno stems: no vocal URL in response (instrumental only)");
+  }
+
+  return result;
 }

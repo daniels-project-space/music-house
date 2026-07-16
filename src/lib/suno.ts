@@ -129,6 +129,14 @@ export async function requestWav(
   const r = await authedFetch("/wav/generate", { method: "POST", body: JSON.stringify(body) });
   if (!r.ok) throw new Error(`Suno wav/generate ${r.status}: ${await r.text()}`);
   const j = await r.json();
+  // sunoapi.org wraps every response in {code,msg,data}; a 200 HTTP status can
+  // still carry an application-level error (same gotcha as timestamped-lyrics).
+  // code 409 = "WAV record already exists" — that's benign, the conversion was
+  // already kicked off and the existing wav task can be polled, so don't throw.
+  const code = Number(j?.code ?? 200);
+  if (code !== 200 && code !== 409) {
+    throw new Error(`Suno wav/generate code ${code}: ${String(j?.msg ?? "")}`);
+  }
   const wavTaskId = j?.data?.taskId ?? j?.taskId;
   if (!wavTaskId) throw new Error(`Suno: no wav taskId in ${JSON.stringify(j).slice(0, 300)}`);
   return { wavTaskId };
@@ -138,15 +146,32 @@ export async function getWav(wavTaskId: string): Promise<{ status: "pending" | "
   const r = await authedFetch(`/wav/record-info?taskId=${encodeURIComponent(wavTaskId)}`);
   if (!r.ok) throw new Error(`Suno wav poll ${r.status}`);
   const j = await r.json();
+  // 200-wrapped error guard (e.g. 404 task-not-found arrives with HTTP 200).
+  const code = Number(j?.code ?? 200);
+  if (code !== 200) {
+    return { status: "failed", error: `wav record-info code ${code}: ${String(j?.msg ?? "")}` };
+  }
   const data = j?.data ?? {};
-  const status = String(data.status ?? "").toUpperCase();
-  if (status === "SUCCESS") {
-    const wavUrl = data?.response?.audio_wav_url ?? data?.audio_wav_url ?? data?.response?.wav_url ?? data?.wav_url;
+  // VERIFIED contract (docs.sunoapi.org/get-wav-conversion-details):
+  //   status field  -> data.successFlag  (PENDING | SUCCESS | CREATE_TASK_FAILED
+  //                    | GENERATE_WAV_FAILED | CALLBACK_EXCEPTION)
+  //   wav url field -> data.response.audioWavUrl  (camelCase)
+  // The previous build read data.status + data.response.audio_wav_url — neither
+  // exists, so SUCCESS was never detected and the poll looped until timeout
+  // forever (the 24-attempts bug). Accept legacy shapes defensively too.
+  const flag = String(data.successFlag ?? data.status ?? "").toUpperCase();
+  if (flag === "SUCCESS") {
+    const wavUrl =
+      data?.response?.audioWavUrl ??
+      data?.response?.audio_wav_url ??
+      data?.audioWavUrl ??
+      data?.response?.wav_url ??
+      data?.wav_url;
     if (!wavUrl) return { status: "pending" };
     return { status: "success", wavUrl: String(wavUrl) };
   }
-  if (status.includes("FAIL") || status === "ERROR") {
-    return { status: "failed", error: data.errorMessage ?? status };
+  if (flag.includes("FAIL") || flag === "ERROR" || flag === "CALLBACK_EXCEPTION") {
+    return { status: "failed", error: data.errorMessage ?? flag };
   }
   return { status: "pending" };
 }
@@ -165,4 +190,59 @@ export async function pollWavUntilReady(
     await new Promise((r) => setTimeout(r, interval));
   }
   throw new Error("Suno WAV export timed out");
+}
+
+// =====================================================================
+// Timestamped (karaoke) lyrics. sunoapi.org aligns each sung word to a
+// start/end time against the rendered audio, which lets the player highlight
+// lyrics in sync. Returned per Suno clip (taskId + that clip's audioId).
+// =====================================================================
+
+export type SunoAlignedWord = {
+  word: string;
+  success: boolean;
+  startS: number;
+  endS: number;
+  palign: number;
+};
+
+export async function getTimestampedLyrics(
+  payload: { taskId: string; audioId: string },
+): Promise<{ alignedWords: SunoAlignedWord[]; raw: unknown }> {
+  // Per the sunoapi.org contract the endpoint takes ONLY taskId + audioId (both
+  // required strings) — exactly like vocal-removal/wav. An earlier build also
+  // sent a bogus `musicIndex`, which the strict validator rejected and returned
+  // empty alignedWords for. audioId alone identifies the clip; no index needed.
+  const body: Record<string, unknown> = {
+    taskId: payload.taskId,
+    audioId: payload.audioId,
+  };
+  const r = await authedFetch("/generate/get-timestamped-lyrics", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`Suno timestamped-lyrics ${r.status}: ${await r.text()}`);
+  const j = await r.json();
+  // sunoapi.org wraps every response in {code,msg,data}: a 200 HTTP status can
+  // still carry an application-level error code. Treat non-200 codes as failures.
+  const code = Number(j?.code ?? 200);
+  if (code !== 200) {
+    throw new Error(`Suno timestamped-lyrics code ${code}: ${String(j?.msg ?? "")}`);
+  }
+  // Response shape: data.alignedWords[].{word,success,startS,endS,palign}.
+  // Accept snake_case (start_s/end_s/aligned_words) defensively across API mirrors.
+  const data = j?.data ?? {};
+  const aligned = data.alignedWords ?? data.aligned_words ?? [];
+  const num = (v: unknown): number =>
+    typeof v === "number" ? v : Number(v as never) || 0;
+  const alignedWords: SunoAlignedWord[] = (Array.isArray(aligned) ? aligned : []).map(
+    (w: Record<string, unknown>) => ({
+      word: String(w.word ?? ""),
+      success: Boolean(w.success ?? true),
+      startS: num(w.startS ?? w.start_s),
+      endS: num(w.endS ?? w.end_s),
+      palign: num(w.palign ?? w.p_align),
+    }),
+  );
+  return { alignedWords, raw: j };
 }

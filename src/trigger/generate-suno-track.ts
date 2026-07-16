@@ -12,9 +12,12 @@ function convexClient() {
   return new ConvexHttpClient(url);
 }
 
+export type LyricLine = { text: string; start: number; isSection: boolean };
+
 // Parse plain-text lyrics into the structured shape the schema expects.
-// Section headers like [Verse 1] are flagged as isSection=true.
-function parseLyrics(text: string): Array<{ text: string; start: number; isSection: boolean }> {
+// Section headers like [Verse 1] are flagged as isSection=true. Used as the
+// fallback when timestamped alignment is unavailable (start stays 0).
+function parseLyrics(text: string): LyricLine[] {
   return text
     .split(/\r?\n/)
     .map((l) => l.trim())
@@ -24,6 +27,61 @@ function parseLyrics(text: string): Array<{ text: string; start: number; isSecti
       start: 0,
       isSection: /^\[.+\]$/.test(l),
     }));
+}
+
+// Build karaoke-ready lines by mapping Suno's word-level timestamps back onto
+// the original lyric text's line structure. We walk the aligned words in order,
+// consuming one per sung (non-section) line word, and stamp each line's start
+// with the startS of its first matched word. Section headers ([Verse], …) get
+// no words of their own — their start is borrowed from the next sung line.
+export function buildAlignedLyrics(
+  originalText: string,
+  alignedWords: Array<{ word: string; startS: number }>,
+): LyricLine[] {
+  const rawLines = originalText
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  if (rawLines.length === 0) return [];
+
+  // Count of word-tokens we expect to consume for each non-section line, so the
+  // pointer into alignedWords advances in lockstep with the original text.
+  // Suno sometimes glues a section marker onto the next sung word
+  // (e.g. "[Verse]\nWaggin'"). Strip any leading [..] marker so the token still
+  // counts as the sung word and its startS is preserved.
+  const words = alignedWords
+    .map((w) => {
+      const cleaned = (w.word ?? "").replace(/^\s*\[[^\]]*\]\s*/g, "").trim();
+      return { word: cleaned, startS: w.startS };
+    })
+    .filter((w) => w.word.length > 0);
+  let wi = 0;
+  const lines: LyricLine[] = [];
+
+  for (const line of rawLines) {
+    const isSection = /^\[.+\]$/.test(line);
+    if (isSection) {
+      // Section header: start = the upcoming sung word (filled in a second pass).
+      lines.push({ text: line, start: -1, isSection: true });
+      continue;
+    }
+    const tokenCount = line.split(/\s+/).filter(Boolean).length || 1;
+    const firstStart = wi < words.length ? words[wi].startS : 0;
+    lines.push({ text: line, start: Number.isFinite(firstStart) ? firstStart : 0, isSection: false });
+    wi = Math.min(words.length, wi + tokenCount);
+  }
+
+  // Resolve section-header starts to the next sung line's start (or 0).
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].start !== -1) continue;
+    let next = 0;
+    for (let j = i + 1; j < lines.length; j++) {
+      if (!lines[j].isSection) { next = lines[j].start; break; }
+    }
+    lines[i].start = next;
+  }
+
+  return lines;
 }
 
 export type SunoGenerateInput = {
@@ -65,9 +123,12 @@ export const generateSunoTrack = task({
         ? `${artistSlug}/${albumSlug}/${trackSlug}`
         : `${artistSlug}/_singles/${trackSlug}`;
 
-      // HARD RULE: every Suno track is saved as lossless WAV. No MP3 fallback — if the
-      // WAV export fails, we fail the whole job rather than silently downgrade quality.
-      // Suno V5_5's WAV is 44.1 kHz / 16-bit stereo (Spotify/Apple Music streaming spec).
+      // PREFERENCE: every Suno track wants to be saved as lossless WAV (44.1 kHz /
+      // 16-bit stereo — Spotify/Apple Music streaming spec). Suno's /wav/generate
+      // is sometimes slow or stuck, so we bound the wait and fall back to the MP3
+      // Suno already returned rather than discarding a perfectly good generation.
+      // When we fall back, the track is flagged needsWavUpgrade=true and the
+      // upgrade-wav scheduled task swaps in the WAV later (async, non-blocking).
       const audioId = t.id;
       if (!audioId) {
         throw new Error(
@@ -76,18 +137,69 @@ export const generateSunoTrack = task({
         );
       }
 
-      logger.info("suno:requesting WAV export", { title, audioId });
-      const { wavTaskId } = await suno.requestWav({ taskId, audioId });
-      const wavUrl = await suno.pollWavUntilReady(wavTaskId, { intervalMs: 8000, timeoutMs: 12 * 60 * 1000 });
-
-      const audioKey = `${baseKey}.wav`;
-      await downloadToR2(wavUrl, audioKey, "audio/wav");
-      logger.info("suno:WAV saved (lossless 44.1kHz stereo)", { audioKey });
+      let audioKey: string;
+      let needsWavUpgrade = false;
+      let wavUpgradeAttempts: number | undefined;
+      try {
+        logger.info("suno:requesting WAV export", { title, audioId });
+        const { wavTaskId } = await suno.requestWav({ taskId, audioId });
+        // Bounded ~7 min: the WAV upgrade is now async, so we don't need to block
+        // the whole generation on a slow export.
+        const wavUrl = await suno.pollWavUntilReady(wavTaskId, { intervalMs: 8000, timeoutMs: 7 * 60 * 1000 });
+        audioKey = `${baseKey}.wav`;
+        await downloadToR2(wavUrl, audioKey, "audio/wav");
+        logger.info("suno:WAV saved (lossless 44.1kHz stereo)", { audioKey });
+      } catch (e) {
+        // WAV slow/stuck/failed — do NOT discard the generation. Save the MP3 Suno
+        // already returned and flag the track for async WAV upgrade.
+        const mp3Url = t.audioUrl;
+        if (!mp3Url) {
+          throw new Error(
+            `Suno track "${title}" WAV export failed AND no MP3 audioUrl to fall back to. ` +
+            `WAV err: ${String(e).slice(0, 200)}`,
+          );
+        }
+        logger.warn("suno:WAV export slow/failed — falling back to MP3, queued for async WAV upgrade", {
+          title,
+          err: String(e).slice(0, 200),
+        });
+        audioKey = `${baseKey}.mp3`;
+        await downloadToR2(mp3Url, audioKey, "audio/mpeg");
+        needsWavUpgrade = true;
+        wavUpgradeAttempts = 0;
+        logger.info("suno:MP3 saved (WAV upgrade pending)", { audioKey });
+      }
 
       let coverKey: string | undefined;
       if (t.imageUrl) {
         coverKey = `${baseKey}.jpg`;
         await downloadToR2(t.imageUrl, coverKey, "image/jpeg");
+      }
+
+      // Lyrics: prefer karaoke-ready timestamped lines (real per-line start
+      // times) so the player can highlight in sync. Best-effort — if alignment
+      // fails or returns nothing, fall back to parseLyrics (start=0). A song is
+      // never failed over lyric alignment.
+      const lyricText = t.lyrics ?? input.lyrics;
+      let lyrics: LyricLine[] | undefined;
+      if (lyricText && lyricText.trim().length > 0) {
+        lyrics = parseLyrics(lyricText);
+        try {
+          const { alignedWords } = await suno.getTimestampedLyrics({ taskId, audioId });
+          if (alignedWords.length > 0) {
+            const aligned = buildAlignedLyrics(lyricText, alignedWords);
+            if (aligned.length > 0) {
+              lyrics = aligned;
+              logger.info("suno:timestamped lyrics aligned", { title, words: alignedWords.length });
+            }
+          } else {
+            logger.warn("suno:timestamped lyrics empty — using unaligned fallback", { title });
+          }
+        } catch (e) {
+          logger.warn("suno:timestamped lyrics failed (non-fatal, using fallback)", {
+            err: String(e).slice(0, 200),
+          });
+        }
       }
 
       const id = await cx.mutation(api.tracks.insert, {
@@ -100,30 +212,30 @@ export const generateSunoTrack = task({
         coverKey,
         sunoTaskId: taskId,
         sunoAudioId: audioId,
+        needsWavUpgrade,
+        wavUpgradeAttempts,
         // Capture whatever lyrics exist at inception: Suno's returned lyrics
         // (vocal tracks) take precedence over the prompt we sent in.
-        lyrics: (() => {
-          const lyr = t.lyrics ?? input.lyrics;
-          return lyr && lyr.trim().length > 0 ? parseLyrics(lyr) : undefined;
-        })(),
+        lyrics,
       });
       created.push(id);
 
-      // Cache Suno's native instrumental stem now so the karaoke video can be
-      // auto-rendered later with zero extra setup (best-effort; never fails gen).
+      // Cache Suno's native stems now (instrumental backing track + isolated
+      // vocal) so the karaoke video can be auto-rendered later with zero extra
+      // setup (best-effort; never fails gen). Both stems are persisted.
       try {
         const destKey = `music-video/stems/${id}-suno-instrumental.mp3`;
-        const instKey = await ensureInstrumental({
+        const { instrumentalKey, vocalKey } = await ensureInstrumental({
           sunoTaskId: taskId,
           sunoAudioId: audioId,
           cachedKey: null,
           destKey,
           log: (m) => logger.info(m),
         });
-        await cx.mutation(api.musicVideo.setInstrumentalKey, { trackId: id, instrumentalKey: instKey });
-        logger.info("suno:instrumental stem cached", { destKey });
+        await cx.mutation(api.musicVideo.setStems, { trackId: id, instrumentalKey, vocalKey });
+        logger.info("suno:stems cached", { instrumentalKey, vocalKey });
       } catch (e) {
-        logger.warn("suno:instrumental separation failed (non-fatal)", { err: String(e).slice(0, 200) });
+        logger.warn("suno:stem separation failed (non-fatal)", { err: String(e).slice(0, 200) });
       }
     }
 
