@@ -1,6 +1,6 @@
 import { defineConfig } from "@trigger.dev/sdk/v3";
 import { playwright } from "@trigger.dev/build/extensions/playwright";
-import { ffmpeg, additionalPackages, additionalFiles } from "@trigger.dev/build/extensions/core";
+import { ffmpeg, additionalPackages, additionalFiles, syncEnvVars } from "@trigger.dev/build/extensions/core";
 
 export default defineConfig({
   // Hardcoded: env-fallback silently deployed to phantom project
@@ -29,6 +29,9 @@ export default defineConfig({
       // music-video-render task can serve it via @remotion/renderer (no nested
       // node_modules at runtime). Rebuild with music-video-remotion/build-bundle.mjs.
       additionalFiles({ files: ["music-video-remotion/bundle/**"] }),
+      syncEnvVars(() => process.env.VAULT_ACCESS_TOKEN
+        ? { VAULT_ACCESS_TOKEN: process.env.VAULT_ACCESS_TOKEN }
+        : undefined),
     ],
   },
 });

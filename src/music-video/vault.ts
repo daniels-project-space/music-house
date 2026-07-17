@@ -19,10 +19,12 @@ type SecretRow = {
 const cache = new Map<string, Record<string, string>>();
 
 async function fetchService(service: string): Promise<Record<string, string>> {
+  const vaultToken = process.env.VAULT_ACCESS_TOKEN;
+  if (!vaultToken) throw new Error("VAULT_ACCESS_TOKEN is not configured");
   const r = await fetch(`${VAULT_URL}/api/query`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path: "secrets:listByService", args: { service }, format: "json" }),
+    body: JSON.stringify({ path: "secrets:listByService", args: { service, vaultToken }, format: "json" }),
   });
   if (!r.ok) throw new Error(`Vault fetch failed for ${service}: ${r.status}`);
   const { value } = (await r.json()) as { value: SecretRow[] };

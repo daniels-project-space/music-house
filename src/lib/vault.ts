@@ -13,12 +13,14 @@ type SecretRow = {
 let cache: Map<string, Record<string, string>> | null = null;
 
 async function fetchService(service: string): Promise<Record<string, string>> {
+  const vaultToken = process.env.VAULT_ACCESS_TOKEN;
+  if (!vaultToken) throw new Error("VAULT_ACCESS_TOKEN is not configured");
   const r = await fetch(`${VAULT_URL}/api/query`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       path: "secrets:listByService",
-      args: { service },
+      args: { service, vaultToken },
       format: "json",
     }),
   });
