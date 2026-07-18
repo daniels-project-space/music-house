@@ -19,8 +19,8 @@ import { schedules, logger } from "@trigger.dev/sdk/v3";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { buildAlignedLyrics, type LyricLine } from "../lib/build-aligned-lyrics";
 import * as suno from "../lib/suno";
-import { buildAlignedLyrics, type LyricLine } from "./generate-suno-track";
 
 const MAX_PER_RUN = 5;
 
