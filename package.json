@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "tsx --test src/**/*.test.ts",
     "trigger:dev": "trigger.dev dev",
     "trigger:deploy": "trigger.dev deploy",
     "build:convex": "convex deploy --cmd 'next build'"
