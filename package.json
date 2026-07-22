@@ -8,6 +8,7 @@
     "build:next": "next build",
     "build": "next build",
     "start": "next start",
+    "test": "tsx --test",
     "lint": "eslint",
     "trigger:dev": "trigger.dev dev",
     "trigger:deploy": "trigger.dev deploy",
