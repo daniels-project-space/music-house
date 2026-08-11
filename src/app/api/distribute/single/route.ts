@@ -2,10 +2,12 @@ import { tasks } from "@trigger.dev/sdk/v3";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
-import type { distributeSingle } from "../../../../trigger/distribute-single";
+import type { distributeSingleDistrokid } from "../../../../trigger/distribute-single-distrokid";
 
 export const runtime = "nodejs";
 
+// Primary "Distribute" button endpoint (posted to by src/components/track-row.tsx).
+// DistroKid is the only active distributor — RouteNote is retired.
 export async function POST(req: Request) {
   const body = (await req.json()) as { trackId?: string; dryRun?: boolean };
   if (!body.trackId) return Response.json({ error: "trackId required" }, { status: 400 });
@@ -14,7 +16,7 @@ export async function POST(req: Request) {
 
   const cx = new ConvexHttpClient(url);
   const jobId = await cx.mutation(api.distribution.createSingle, { trackId: body.trackId as Id<"tracks"> });
-  const handle = await tasks.trigger<typeof distributeSingle>("distribute-single", {
+  const handle = await tasks.trigger<typeof distributeSingleDistrokid>("distribute-single-distrokid", {
     jobId,
     ...(body.dryRun ? { dryRun: true } : {}),
   });

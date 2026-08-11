@@ -20,8 +20,9 @@ export async function POST(req: Request) {
   };
   if (!body.trackId) return Response.json({ error: "trackId required" }, { status: 400 });
 
-  // Default to RouteNote so existing callers that omit `distributor` behave exactly as before.
-  const distributorRaw = body.distributor ?? "routenote";
+  // Default to DistroKid — RouteNote is retired as an active distributor (kept as a
+  // literal only for backward-compat with historical rows / explicit opt-in).
+  const distributorRaw = body.distributor ?? "distrokid";
   if (distributorRaw !== "routenote" && distributorRaw !== "distrokid") {
     return Response.json({ error: "distributor must be 'routenote' or 'distrokid'" }, { status: 400 });
   }

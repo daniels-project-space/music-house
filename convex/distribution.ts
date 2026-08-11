@@ -12,7 +12,7 @@ export const createSingle = mutation({
     const id = await ctx.db.insert("distributionJobs", {
       trackId,
       releaseType: "single",
-      distributor: distributor ?? "routenote",
+      distributor: distributor ?? "distrokid",
       status: "pending",
       createdAt: Date.now(),
     });
@@ -62,7 +62,7 @@ export const create = mutation({
     const id = await ctx.db.insert("distributionJobs", {
       trackId,
       releaseType: "single",
-      distributor: "routenote",
+      distributor: "distrokid",
       status: "pending",
       createdAt: Date.now(),
     });
