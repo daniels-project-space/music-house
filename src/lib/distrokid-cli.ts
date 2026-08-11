@@ -9,9 +9,9 @@ import { promisify } from "node:util";
 // `runDistrokidCli` is INERT: it throws at the single invocation boundary so no
 // release can ever be submitted accidentally.
 //
-// Structure mirrors src/lib/routenote-http.ts: one subprocess boundary (there: curl),
-// typed step payloads, and every step funneling through that single boundary so the
-// real CLI swaps in at exactly one spot.
+// Structure: one subprocess boundary (runDistrokidCli below), typed step payloads,
+// and every step funneling through that single boundary so the real CLI swaps in
+// at exactly one spot.
 
 const execP = promisify(execFile);
 
@@ -19,7 +19,7 @@ const execP = promisify(execFile);
 // Shared types — imported by src/trigger/distribute-single-distrokid.ts
 // ---------------------------------------------------------------------------
 
-/** Cookie jar entry, identical shape to routenote-http.ts CookieEntry. */
+/** Cookie jar entry passed to the DistroKid CLI. */
 export type CookieEntry = {
   name: string;
   value: string;
@@ -31,7 +31,7 @@ export type CookieEntry = {
   sameSite?: string;
 };
 
-/** Reference to a single audio asset. Buffer-based like DistributeTrack in routenote-http.ts. */
+/** Reference to a single audio asset (buffer-based). */
 export type DistrokidAudio = {
   audioBuffer: Buffer | Uint8Array;
   audioFilename: string;
@@ -106,7 +106,7 @@ export type DistrokidCliResult = {
   stderr: string;
 };
 
-/** Outcome of one submit-flow step. Mirrors DistributeStepResult in routenote-http.ts. */
+/** Outcome of one submit-flow step. */
 export type DistrokidStepResult = { step: string; ok: boolean; detail?: string };
 
 /** Final result of the full submit flow. */
@@ -122,8 +122,8 @@ export type DistrokidSubmitResult = {
 // THE ONE invocation boundary.
 //
 // This is the single place that will later spawn the real DistroKid CLI binary
-// (similar to how routenote-http.ts shells `curl`). Until Printing Press emits
-// that binary, it is INERT and throws.
+// (a single subprocess boundary). Until Printing Press emits that binary, it is
+// INERT and throws.
 // ---------------------------------------------------------------------------
 
 export const DISTROKID_CLI_NOT_WIRED =

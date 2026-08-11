@@ -14,7 +14,8 @@ export default function DistributionPage() {
   const setComplete = useMutation(api.distribution.setComplete);
   const setStreamingIds = useMutation(api.artists.setStreamingIds);
   const [busy, setBusy] = useState<string | null>(null);
-  const [distributor, setDistributor] = useState<"routenote" | "distrokid">("distrokid");
+  // DistroKid is the only active distributor — RouteNote is retired.
+  const distributor = "distrokid" as const;
   const analytics = useQuery(api.distributorAnalytics.latest, { distributor: "distrokid" });
   const [refreshing, setRefreshing] = useState(false);
 
@@ -134,43 +135,20 @@ export default function DistributionPage() {
         <div className="flex items-baseline gap-3">
           <h1 className="font-display text-[1.05rem] font-bold tracking-tight text-paper">Distribution</h1>
           <span className="font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint">
-            via {distributor === "distrokid" ? "DistroKid" : "RouteNote"}
+            via DistroKid
           </span>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex rounded border overflow-hidden" style={{ borderColor: "var(--color-brd)" }}>
-            {(["distrokid", "routenote"] as const).map((d) => (
-              <button
-                key={d}
-                onClick={() => setDistributor(d)}
-                className="font-mono text-[0.55rem] uppercase tracking-[0.14em] px-2.5 py-1.5 transition-colors"
-                style={
-                  distributor === d
-                    ? { background: "rgba(6,182,212,0.12)", color: "#06b6d4" }
-                    : { color: "var(--color-paper-faint, #9ca3af)" }
-                }
-              >
-                {d === "distrokid" ? "DistroKid" : "RouteNote"}
-              </button>
-            ))}
-          </div>
-          <a
-            href={
-              distributor === "distrokid"
-                ? "https://distrokid.com/dashboard/albums/"
-                : "https://www.routenote.com/rn/releases"
-            }
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-mono text-[0.62rem] uppercase tracking-[0.16em] px-3 py-1.5 rounded border text-cyan hover:bg-cyan/[0.06] transition-colors"
-            style={{ borderColor: "rgba(6,182,212,0.4)" }}
-          >
-            {distributor === "distrokid" ? "Open DistroKid ↗" : "Open RouteNote ↗"}
-          </a>
-        </div>
+        <a
+          href="https://distrokid.com/dashboard/albums/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-mono text-[0.62rem] uppercase tracking-[0.16em] px-3 py-1.5 rounded border text-cyan hover:bg-cyan/[0.06] transition-colors"
+          style={{ borderColor: "rgba(6,182,212,0.4)" }}
+        >
+          Open DistroKid ↗
+        </a>
       </div>
-      {distributor === "distrokid" ? (
-        <div
+      <div
           className="flex flex-wrap items-center gap-x-6 gap-y-2 mb-4 px-3.5 py-2.5 rounded-lg border bg-card"
           style={{ borderColor: "var(--color-brd)" }}
         >
@@ -211,9 +189,8 @@ export default function DistributionPage() {
             {refreshing ? "Queueing…" : "Refresh stats"}
           </button>
         </div>
-      ) : null}
 
-      {distributor === "distrokid" && unpinned.length > 0 ? (
+      {unpinned.length > 0 ? (
         <div
           className="mb-4 px-3.5 py-3 rounded-lg border"
           style={{ borderColor: "rgba(239,68,68,0.4)", background: "rgba(239,68,68,0.06)" }}
@@ -254,8 +231,7 @@ export default function DistributionPage() {
         </div>
       ) : null}
 
-      {distributor === "distrokid" ? (
-        <details className="mb-4 px-3.5 py-2.5 rounded-lg border bg-card" style={{ borderColor: "var(--color-brd)" }}>
+      <details className="mb-4 px-3.5 py-2.5 rounded-lg border bg-card" style={{ borderColor: "var(--color-brd)" }}>
           <summary className="font-mono text-[0.6rem] uppercase tracking-[0.16em] text-paper-faint cursor-pointer">
             Spotify algorithmic checklist (get into shuffle / Radio / Discover Weekly)
           </summary>
@@ -267,7 +243,6 @@ export default function DistributionPage() {
             <li>Algorithmic pickup is driven by first-14-day engagement: save rate &gt;3.5%, stream-to-listener &gt;2.0, skip &lt;20%. Drive saves via the funnel + pre-save.</li>
           </ul>
         </details>
-      ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <Column color="#34d399" label="Ready">

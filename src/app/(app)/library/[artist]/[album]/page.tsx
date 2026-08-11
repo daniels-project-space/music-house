@@ -90,7 +90,7 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
   const isComplete = !!(albumRow as { completedAt?: number }).completedAt;
 
   const distributeAll = async () => {
-    if (!confirm(`Submit album "${albumRow.name}" (${sorted.length} track${sorted.length === 1 ? "" : "s"}) to RouteNote for review?`)) return;
+    if (!confirm(`Submit album "${albumRow.name}" (${sorted.length} track${sorted.length === 1 ? "" : "s"}) to DistroKid for review?`)) return;
     try {
       const r = await fetch("/api/distribute/album", {
         method: "POST",
