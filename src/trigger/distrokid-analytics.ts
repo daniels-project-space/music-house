@@ -6,6 +6,8 @@ import {
   closeSession,
   fetchStatsPage,
   fetchEarningsPage,
+  fetchHyperfollowPages,
+  findHyperfollowUrl,
 } from "../lib/distrokid-native";
 import {
   buildStatsUrl,
@@ -13,6 +15,10 @@ import {
   parseEarnings,
 } from "../lib/distrokid-analytics";
 import type { CookieEntry } from "../lib/distrokid-cli";
+
+function humanizeSlug(slug: string): string {
+  return slug.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+}
 
 // READ-ONLY analytics pull: account-wide streams (amCharts dataProvider on
 // /stats/) + bank balance (/bank/overview/), persisted to Convex
@@ -61,6 +67,49 @@ async function runAnalyticsPull(convexUrlOverride?: string) {
       balancePending: earnings.pending,
       message: stats.message ?? earnings.message,
     });
+
+    // HyperFollow sync: best-effort. A release only gets a URL once Daniel has
+    // manually built a HyperFollow page for it in DistroKid's own dashboard
+    // (see fetchHyperfollowPages) — this just discovers + persists whichever
+    // already exist, piggybacking on this cron (every 2 days) instead of a
+    // dedicated schedule. Never fails the analytics pull above.
+    try {
+      const cards = await fetchHyperfollowPages(session.page, log);
+      if (cards.length) {
+        const jobs = await cx.query(api.distribution.listAll, {});
+        const pending = jobs.filter(
+          (j) => (j.status === "submitted" || j.status === "complete") && !j.hyperfollowUrl,
+        );
+        if (pending.length) {
+          const allAlbums = await cx.query(api.albums.list, {});
+          for (const j of pending) {
+            let artistSlug: string | undefined;
+            let releaseTitle: string | undefined;
+            if (j.releaseType === "album" && j.albumId) {
+              const album = allAlbums.find((a) => a._id === j.albumId);
+              if (album) {
+                artistSlug = album.artistSlug;
+                releaseTitle = album.name;
+              }
+            } else {
+              const track = await cx.query(api.tracks.get, { id: j.trackId });
+              if (track) {
+                artistSlug = track.artistSlug;
+                releaseTitle = track.title;
+              }
+            }
+            if (!artistSlug || !releaseTitle) continue;
+            const url = findHyperfollowUrl(cards, { artistName: humanizeSlug(artistSlug), releaseTitle });
+            if (url) {
+              await cx.mutation(api.distribution.setHyperfollowUrl, { id: j._id, hyperfollowUrl: url });
+              log(`hyperfollow matched: ${releaseTitle} -> ${url}`);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      log("hyperfollow sync failed (non-fatal): " + (e as Error).message);
+    }
 
     return {
       streamsTotal: stats.total,

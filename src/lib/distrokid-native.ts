@@ -258,6 +258,52 @@ export async function fetchStatsPage(page: Page, statsUrl: string, log?: (m: str
   return { url: page.url(), html, selector };
 }
 
+// ---------------------------------------------------------------------------
+// HyperFollow pre-save link discovery (READ-ONLY). DistroKid's /hyperfollow/
+// dashboard lists every HyperFollow page the artist has manually built (via
+// DistroKid's own "NEW PAGE" wizard — these are NOT auto-created per release,
+// so a brand-new release won't have one until a human makes it there; we only
+// discover pages that already exist). Confirmed live 2026-08 against the
+// account's one existing page ("The Dollcat Club - A Dying Art"): each card is
+// a `.hfBox` with a `.bold` title div ("{ArtistName} - {ReleaseTitle}") and an
+// `a.hfPreviewLink[row]` whose href is the exact public URL. We match on that
+// title string (identical to what distribute-*-distrokid.ts already computes
+// at submit time) instead of guessing the URL's slug transform — confirmed
+// empirically to be asymmetric (artist segment strips punctuation/spaces,
+// release segment keeps dashes) and not worth reverse-engineering.
+// ---------------------------------------------------------------------------
+
+export type HyperfollowCard = { title: string; url: string };
+
+export async function fetchHyperfollowPages(
+  page: Page,
+  log: (msg: string) => void = () => {},
+): Promise<HyperfollowCard[]> {
+  await fetchPageThroughCf(page, "https://distrokid.com/hyperfollow/", log);
+  const cards = await page
+    .$$eval(".hfBox", (boxes) =>
+      boxes.map((box) => {
+        const titleEl = box.querySelector(".bold");
+        const linkEl = box.querySelector("a.hfPreviewLink[row]");
+        return {
+          title: (titleEl?.textContent || "").replace(/\s+/g, " ").trim(),
+          url: (linkEl?.getAttribute("href") || "").replace(/\s+/g, " ").trim(),
+        };
+      }),
+    )
+    .catch(() => [] as HyperfollowCard[]);
+  return cards.filter((c) => c.title && c.url);
+}
+
+// Exact match on DistroKid's card title format ("{ArtistName} - {ReleaseTitle}").
+export function findHyperfollowUrl(
+  cards: HyperfollowCard[],
+  release: { artistName: string; releaseTitle: string },
+): string | undefined {
+  const wanted = `${release.artistName} - ${release.releaseTitle}`.replace(/\s+/g, " ").trim().toLowerCase();
+  return cards.find((c) => c.title.toLowerCase() === wanted)?.url;
+}
+
 export type EarningsPageResult = {
   url: string;
   html: string;
