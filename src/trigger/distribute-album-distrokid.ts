@@ -14,6 +14,7 @@ import {
   type DistrokidTrack,
 } from "../lib/distrokid-cli";
 import { runDistrokidRelease } from "../lib/distrokid-native";
+import { generatePitchCopy } from "../lib/pitch";
 
 function convexClient() {
   const url = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -248,6 +249,22 @@ export const distributeAlbumDistrokid = task({
     await cx.mutation(api.distribution.setSubmitted, { id: input.jobId, releaseUrl: result.releaseUrl });
     await cx.mutation(api.artists.markDistrokidReleased, { slug: album.artistSlug });
     logger.info("dist:album:dk:submitted", { releaseId, upc: result.upc, trackCount: dkTracks.length });
+
+    // Spotify pitch copy: auto-generate + store a per-track pitch for every track in
+    // the album now that the release is submitted (mirrors distribute-single-distrokid).
+    // Best-effort per track — one failure must never fail the others or the release.
+    for (const t of tracks) {
+      try {
+        const pitchCopy = await generatePitchCopy(cx, {
+          artistSlug: t.artistSlug,
+          albumSlug: t.albumSlug,
+          title: t.title,
+        });
+        await cx.mutation(api.tracks.setPitchCopy, { id: t._id, pitchCopy });
+      } catch (e) {
+        logger.warn("dist:album:dk:pitch generation failed", { track: t.title, error: (e as Error).message });
+      }
+    }
 
     return { releaseId, upc: result.upc, releaseUrl: result.releaseUrl, trackCount: dkTracks.length };
   },

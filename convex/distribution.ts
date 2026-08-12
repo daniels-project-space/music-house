@@ -168,6 +168,15 @@ export const setProgress = mutation({
   handler: async (ctx, { id, progress }) => ctx.db.patch(id, { progress }),
 });
 
+// Persists a HyperFollow pre-save URL discovered read-only from DistroKid's
+// dashboard (see fetchHyperfollowPages in lib/distrokid-native.ts, called from
+// the distrokid-analytics Trigger task).
+export const setHyperfollowUrl = mutation({
+  args: { id: v.id("distributionJobs"), hyperfollowUrl: v.string() },
+  handler: async (ctx, { id, hyperfollowUrl }) =>
+    ctx.db.patch(id, { hyperfollowUrl, hyperfollowUrlAt: Date.now() }),
+});
+
 // Store pasted distributor session cookies (RouteNote or DistroKid) into
 // distributorAuth. Upserts by distributor, mirroring distributorAuth.save.
 export const setDistributorCookies = mutation({

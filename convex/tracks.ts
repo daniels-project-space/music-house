@@ -277,6 +277,15 @@ export const setDistributed = mutation({
     ctx.db.patch(id, { distributed, distributedAt: distributed ? Date.now() : undefined }),
 });
 
+// Stores the Spotify-for-Artists pitch copy (src/lib/pitch.ts) — called by the
+// manual "♪ Pitch" button (src/app/api/pitch/generate/route.ts) and by the
+// auto-generate-on-submit hook in the distribute-*-distrokid Trigger tasks.
+export const setPitchCopy = mutation({
+  args: { id: v.id("tracks"), pitchCopy: v.string() },
+  handler: async (ctx, { id, pitchCopy }) =>
+    ctx.db.patch(id, { pitchCopy, pitchGeneratedAt: Date.now() }),
+});
+
 export const remove = mutation({
   args: { id: v.id("tracks") },
   handler: async (ctx, { id }) => ctx.db.delete(id),

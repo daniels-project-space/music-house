@@ -96,6 +96,13 @@ export default defineSchema({
     distributed: v.boolean(),
     distributedAt: v.optional(v.number()),
     lastDistributionJobId: v.optional(v.id("distributionJobs")),
+    // Spotify for Artists pitch copy (genres/moods/similar artists/story). Manually
+    // generatable via the "♪ Pitch" button (src/app/api/pitch/generate/route.ts) and
+    // now also auto-generated the moment this track's distribution job reaches
+    // submitted/complete (see distribute-*-distrokid.ts) — same shared logic,
+    // src/lib/pitch.ts. Regenerating overwrites both fields.
+    pitchCopy: v.optional(v.string()),
+    pitchGeneratedAt: v.optional(v.number()),
     createdAt: v.number(),
     archivedAt: v.optional(v.number()),
   })
@@ -168,6 +175,13 @@ export default defineSchema({
     liveViewUrl: v.optional(v.string()),
     releaseUrl: v.optional(v.string()),
     upc: v.optional(v.string()),
+    // Public pre-save/share link from DistroKid's HyperFollow builder. NOT
+    // auto-created per release — DistroKid only shows one once a HyperFollow page
+    // has been manually built for it (distrokid.com/hyperfollow/new/). Discovered
+    // read-only (scraping distrokid.com/hyperfollow/) by the distrokid-analytics
+    // Trigger task every run — see fetchHyperfollowPages in lib/distrokid-native.ts.
+    hyperfollowUrl: v.optional(v.string()),
+    hyperfollowUrlAt: v.optional(v.number()),
     // DistroKid: AI disclosure + ISRC carried on the job.
     aiDisclosure: v.optional(v.object({
       isAi: v.boolean(),

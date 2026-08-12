@@ -4,12 +4,13 @@ import { useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
-type PitchTarget = { artistSlug: string; albumSlug?: string; title: string };
+type PitchTarget = { artistSlug: string; albumSlug?: string; title: string; pitchCopy?: string };
 
 export default function DistributionPage() {
   const tracks = useQuery(api.tracks.list, {}) ?? [];
   const jobs = useQuery(api.distribution.listAll, {}) ?? [];
   const artists = useQuery(api.artists.list, {}) ?? [];
+  const albums = useQuery(api.albums.list, {}) ?? [];
   const setDistributed = useMutation(api.tracks.setDistributed);
   const setComplete = useMutation(api.distribution.setComplete);
   const setStreamingIds = useMutation(api.artists.setStreamingIds);
@@ -64,8 +65,15 @@ export default function DistributionPage() {
 
   const openPitch = async (t: PitchTarget) => {
     setPitchTarget(t);
-    setPitchText("");
     setPitchErr(null);
+    // Already auto-generated (or previously generated) — show it instantly,
+    // no need to burn another Claude call.
+    if (t.pitchCopy) {
+      setPitchText(t.pitchCopy);
+      setPitchLoading(false);
+      return;
+    }
+    setPitchText("");
     setPitchLoading(true);
     try {
       const r = await fetch("/api/pitch/generate", {
@@ -100,6 +108,24 @@ export default function DistributionPage() {
     const prev = jobByTrack.get(j.trackId);
     if (!prev || j._creationTime > prev._creationTime) jobByTrack.set(j.trackId, j);
   }
+
+  // HyperFollow pre-save link resolution. distributionJobs.trackId only points at
+  // the FIRST track of an album release, so a direct jobByTrack lookup covers
+  // singles + that first track; every other track in the album needs the
+  // albumId → hyperfollowUrl fallback below.
+  const hyperfollowByAlbumId = new Map<string, string>();
+  for (const j of jobs) {
+    if (j.hyperfollowUrl && j.albumId) hyperfollowByAlbumId.set(j.albumId, j.hyperfollowUrl);
+  }
+  const albumIdBySlug = new Map<string, string>();
+  for (const a of albums) albumIdBySlug.set(`${a.artistSlug}/${a.slug}`, a._id);
+  const resolveHyperfollow = (t: (typeof tracks)[number]): string | undefined => {
+    const direct = jobByTrack.get(t._id)?.hyperfollowUrl;
+    if (direct) return direct;
+    if (!t.albumSlug) return undefined;
+    const albumId = albumIdBySlug.get(`${t.artistSlug}/${t.albumSlug}`);
+    return albumId ? hyperfollowByAlbumId.get(albumId) : undefined;
+  };
 
   const active = tracks.filter((t) => {
     if (t.distributed) return false;
@@ -327,24 +353,56 @@ export default function DistributionPage() {
           {done.length === 0 ? (
             <Empty />
           ) : (
-            done.slice(0, 80).map((t) => (
-              <Row key={t._id} track={t}>
-                <button
-                  onClick={() => openPitch({ artistSlug: t.artistSlug, albumSlug: t.albumSlug, title: t.title })}
-                  className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2 py-1 rounded border mr-2"
-                  style={{ borderColor: "#1db954", color: "#1db954" }}
-                >
-                  ♪ Pitch
-                </button>
-                <button
-                  onClick={() => setDistributed({ id: t._id as Id<"tracks">, distributed: false })}
-                  className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2 py-1 rounded border opacity-0 group-hover:opacity-100 transition-opacity"
-                  style={{ borderColor: "#06b6d4", color: "#06b6d4" }}
-                >
-                  Recall
-                </button>
-              </Row>
-            ))
+            done.slice(0, 80).map((t) => {
+              const hyperfollowUrl = resolveHyperfollow(t);
+              return (
+                <Row key={t._id} track={t}>
+                  {hyperfollowUrl ? (
+                    <span className="inline-flex items-center gap-1 mr-2">
+                      <a
+                        href={hyperfollowUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Share your Spotify pre-save link"
+                        className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2 py-1 rounded border"
+                        style={{ borderColor: "#a78bfa", color: "#a78bfa" }}
+                      >
+                        ⇪ Pre-save
+                      </a>
+                      <button
+                        onClick={() => navigator.clipboard?.writeText(hyperfollowUrl).catch(() => {})}
+                        title="Copy pre-save link"
+                        className="font-mono text-[0.55rem] px-1.5 py-1 rounded border"
+                        style={{ borderColor: "#a78bfa", color: "#a78bfa" }}
+                      >
+                        ⧉
+                      </button>
+                    </span>
+                  ) : null}
+                  <button
+                    onClick={() =>
+                      openPitch({ artistSlug: t.artistSlug, albumSlug: t.albumSlug, title: t.title, pitchCopy: t.pitchCopy })
+                    }
+                    title={t.pitchGeneratedAt ? `Generated ${new Date(t.pitchGeneratedAt).toLocaleString()}` : undefined}
+                    className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2 py-1 rounded border mr-2"
+                    style={
+                      t.pitchCopy
+                        ? { borderColor: "#1db954", color: "#0a0a0a", background: "#1db954" }
+                        : { borderColor: "#1db954", color: "#1db954" }
+                    }
+                  >
+                    {t.pitchCopy ? "✓ Pitch ready" : "♪ Pitch"}
+                  </button>
+                  <button
+                    onClick={() => setDistributed({ id: t._id as Id<"tracks">, distributed: false })}
+                    className="font-mono text-[0.55rem] uppercase tracking-[0.12em] px-2 py-1 rounded border opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ borderColor: "#06b6d4", color: "#06b6d4" }}
+                  >
+                    Recall
+                  </button>
+                </Row>
+              );
+            })
           )}
         </Column>
       </div>

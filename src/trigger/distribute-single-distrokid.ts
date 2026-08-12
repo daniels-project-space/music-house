@@ -16,6 +16,7 @@ import {
 import { runDistrokidRelease } from "../lib/distrokid-native";
 import { resolveReleaseLinks, hasAnyStoreLink } from "../lib/resolve-release-links";
 import { validateReleaseMetadata } from "../lib/validate-release-metadata";
+import { generatePitchCopy } from "../lib/pitch";
 
 function convexClient() {
   const url = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -313,6 +314,22 @@ export const distributeSingleDistrokid = task({
       upc: result.upc,
       releaseUrl: result.releaseUrl,
     });
+
+    // Spotify pitch copy: auto-generate the Spotify-for-Artists pitch now that the
+    // release is submitted, so it's waiting in the UI instead of requiring a manual
+    // "♪ Pitch" click first. Best-effort — the release is already submitted;
+    // nothing here may throw (mirrors the storeLinks hook below).
+    try {
+      const pitchCopy = await generatePitchCopy(cx, {
+        artistSlug: track.artistSlug,
+        albumSlug: track.albumSlug,
+        title: track.title,
+      });
+      await cx.mutation(api.tracks.setPitchCopy, { id: track._id, pitchCopy });
+      logger.info("dist:single:dk:pitch generated", { length: pitchCopy.length });
+    } catch (e) {
+      logger.warn("dist:single:dk:pitch generation failed", { error: (e as Error).message });
+    }
 
     // SEO funnel: resolve this release's streaming-store links and persist them on
     // its album, so the public /r/{artist}/{album} page can link out to the stores.
