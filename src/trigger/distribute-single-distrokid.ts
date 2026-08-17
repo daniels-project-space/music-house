@@ -67,6 +67,9 @@ export const distributeSingleDistrokid = task({
   id: "distribute-single-distrokid",
   maxDuration: 900,
   machine: "large-1x",
+  // Playwright-driven DistroKid submission. Never let an infrastructure retry
+  // re-submit a release or re-run the headless Cloudflare-solving flow.
+  retry: { maxAttempts: 1 },
   run: async (input: DistributeSingleDistrokidInput, { ctx }) => {
     const cx = convexClient();
     logger.info("dist:single:dk:start", { jobId: input.jobId, runId: ctx.run.id });

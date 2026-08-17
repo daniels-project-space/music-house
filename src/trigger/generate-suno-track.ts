@@ -97,6 +97,9 @@ export type SunoGenerateInput = {
 export const generateSunoTrack = task({
   id: "generate-suno-track",
   maxDuration: 1800,
+  // Generation calls are billed and non-idempotent. Never let an infrastructure
+  // retry re-run a successful (paid) generation because of a later failure.
+  retry: { maxAttempts: 1 },
   run: async (input: SunoGenerateInput, { ctx }) => {
     const cx = convexClient();
     logger.info("suno:start", { jobId: input.jobId });

@@ -32,6 +32,9 @@ export type MurekaGenerateInput = {
 export const generateMurekaTrack = task({
   id: "generate-mureka-track",
   maxDuration: 1800,
+  // Generation calls are billed and non-idempotent. Never let an infrastructure
+  // retry re-run a successful (paid) generation because of a later failure.
+  retry: { maxAttempts: 1 },
   run: async (input: MurekaGenerateInput) => {
     const cx = convexClient();
     logger.info("mureka:start", { jobId: input.jobId });
