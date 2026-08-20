@@ -282,6 +282,7 @@ export default function AlbumPage({ params }: { params: Promise<{ artist: string
                 duration={t.duration}
                 generator={t.generator}
                 audioKey={t.audioKey}
+                flacKey={t.flacKey}
                 coverKey={t.coverKey ?? albumRow?.coverKey}
                 hearted={hearted.has(t._id)}
                 onShowLyrics={() => setLyricsTrackId(t._id)}

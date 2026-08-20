@@ -74,6 +74,30 @@ export async function presignDownload(key: string, expiresIn = 3600): Promise<st
   return getSignedUrl(c, new GetObjectCommand({ Bucket: BUCKET, Key: key }), { expiresIn });
 }
 
+// Presign a GET that browsers save to disk instead of streaming inline. R2 honours
+// the response-content-* overrides, so the object itself keeps its stored metadata.
+export async function presignAttachment(
+  key: string,
+  filename: string,
+  expiresIn = 900,
+  contentType?: string,
+): Promise<string> {
+  const c = await client();
+  // ASCII fallback for legacy clients + RFC 5987 form for everything else.
+  const ascii = filename.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "_");
+  const disposition = `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+  return getSignedUrl(
+    c,
+    new GetObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      ResponseContentDisposition: disposition,
+      ResponseContentType: contentType,
+    }),
+    { expiresIn },
+  );
+}
+
 export async function presignUpload(key: string, expiresIn = 3600, contentType?: string): Promise<string> {
   const c = await client();
   return getSignedUrl(c, new PutObjectCommand({ Bucket: BUCKET, Key: key, ContentType: contentType }), { expiresIn });

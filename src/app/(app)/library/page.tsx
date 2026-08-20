@@ -309,6 +309,7 @@ function UnsortedTracks({
     duration?: number;
     generator: "suno" | "mureka" | "import";
     audioKey: string;
+    flacKey?: string;
     trackNum?: number;
     createdAt?: number;
     genre?: string;
@@ -349,6 +350,7 @@ function UnsortedTracks({
             duration={t.duration}
             generator={t.generator}
             audioKey={t.audioKey}
+            flacKey={t.flacKey}
             hearted={hearted.has(t._id)}
             queue={queue}
             index={i}

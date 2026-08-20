@@ -19,6 +19,8 @@ type TrackRowProps = {
   duration?: number;
   generator: "suno" | "mureka" | "import";
   audioKey: string;
+  /** Lossless master, when one exists. Preferred over audioKey for downloads. */
+  flacKey?: string;
   /** Either pass a resolved coverUrl or a coverKey for auto-resolution */
   coverUrl?: string;
   coverKey?: string;
@@ -58,6 +60,7 @@ export function TrackRow({
   duration,
   generator,
   audioKey,
+  flacKey,
   coverUrl,
   coverKey,
   createdAt,
@@ -130,6 +133,26 @@ export function TrackRow({
     } finally {
       setDistributing(false);
     }
+  };
+
+  // Highest-quality source we have: the lossless master when one exists, else
+  // whatever audioKey points at (Suno .wav/.mp3, Mureka .flac). Same preference
+  // order the DistroKid distribution jobs use.
+  const downloadKey = flacKey ?? audioKey;
+  const downloadFormat = (downloadKey.split(".").pop() ?? "").toUpperCase();
+
+  const handleDownload = () => {
+    setMenuOpen(false);
+    if (!downloadKey) return;
+    const safeTitle = title.replace(/[/\\:*?"<>|]/g, "-").trim() || "track";
+    const name = trackNum ? `${String(trackNum).padStart(2, "0")} ${safeTitle}` : safeTitle;
+    const a = document.createElement("a");
+    a.href = `/api/download?key=${encodeURIComponent(downloadKey)}&name=${encodeURIComponent(name)}`;
+    a.rel = "noopener";
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   const isPlaying = current?.id === trackId;
@@ -270,6 +293,11 @@ export function TrackRow({
             <Item icon="✎" label="Rename" onClick={() => { setMenuOpen(false); setEditing(true); }} />
             <Item icon="♪" label="Lyrics" onClick={() => { setMenuOpen(false); if (onShowLyrics) onShowLyrics(); else setLyricsOpen(true); }} />
             <Item icon="→" label="Move to…" onClick={() => { setMenuOpen(false); setMoveModalOpen(true); }} />
+            <Item
+              icon="⬇"
+              label={downloadFormat ? `Download · ${downloadFormat}` : "Download"}
+              onClick={handleDownload}
+            />
             <Item icon="📡" label="Distribute" onClick={startDistribute} />
             <Item icon="✓" label="Mark distributed" onClick={() => { setDistributed({ id: trackId, distributed: true }); setMenuOpen(false); }} />
             <div className="my-1 mx-2 h-px bg-brd" />
