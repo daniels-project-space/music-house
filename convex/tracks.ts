@@ -240,6 +240,25 @@ export const move = mutation({
   },
 });
 
+// Repoint a track at audio that has been copied to a new R2 location. Used when
+// a track's files were left under a stale prefix (e.g. the `_unsorted/` fallback
+// from generation time) after the row itself was moved to a real artist/album.
+// Copy the objects first — this only rewrites the pointers.
+export const relocateAudio = mutation({
+  args: {
+    id: v.id("tracks"),
+    audioKey: v.string(),
+    flacKey: v.optional(v.string()),
+  },
+  handler: async (ctx, { id, audioKey, flacKey }) => {
+    const track = await ctx.db.get(id);
+    if (!track) throw new Error("Track not found");
+    const patch: { audioKey: string; flacKey?: string } = { audioKey };
+    if (flacKey !== undefined) patch.flacKey = flacKey;
+    await ctx.db.patch(id, patch);
+  },
+});
+
 export const reorder = mutation({
   args: {
     id: v.id("tracks"),
