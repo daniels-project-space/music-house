@@ -197,6 +197,25 @@ export function Player() {
           </div>
         </div>
       )}
+      {!current && !isPublicRoute && (
+        <div
+          className="fixed bottom-0 left-0 right-0 z-40 border-t border-brd bg-[#080a10]/95 px-5 py-3 backdrop-blur-2xl lg:left-[220px] sm:px-6 lg:px-8"
+          style={{ boxShadow: "0 -16px 40px rgba(0,0,0,0.38)" }}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-[0.58rem] uppercase tracking-[0.16em] text-t2">Your player</p>
+              <p className="mt-0.5 text-xs text-t3">Choose a finished song to listen, then control it here.</p>
+            </div>
+            <Link
+              href="/studio#finished-songs"
+              className="rounded-md border border-purple/40 bg-purple/[0.08] px-3 py-2 font-mono text-[0.58rem] uppercase tracking-[0.14em] text-purple transition-colors hover:border-pink/50 hover:text-pink"
+            >
+              Finished songs →
+            </Link>
+          </div>
+        </div>
+      )}
     </>
   );
 }

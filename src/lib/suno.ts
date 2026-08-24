@@ -13,6 +13,17 @@ export type SunoGenerateInput = {
   instrumental?: boolean;
 };
 
+export type SunoExtendInput = {
+  audioId: string;
+  model?: string;
+  callbackUrl?: string;
+  defaultParamFlag?: boolean;
+  prompt?: string;
+  style?: string;
+  title?: string;
+  continueAt?: number;
+};
+
 async function authedFetch(path: string, init?: RequestInit): Promise<Response> {
   const key = await getSecret("suno", "SUNO_API_KEY");
   return fetch(`${BASE}${path}`, {
@@ -41,6 +52,34 @@ export async function generate(input: SunoGenerateInput): Promise<{ taskId: stri
   const j = await r.json();
   const taskId = j?.data?.taskId ?? j?.taskId;
   if (!taskId) throw new Error(`Suno: no taskId in response ${JSON.stringify(j).slice(0, 300)}`);
+  return { taskId };
+}
+
+export async function extend(input: SunoExtendInput): Promise<{ taskId: string }> {
+  const body: Record<string, unknown> = {
+    defaultParamFlag: input.defaultParamFlag ?? false,
+    audioId: input.audioId,
+    model: input.model ?? "V5_5",
+    callBackUrl:
+      input.callbackUrl ??
+      process.env.SUNO_CALLBACK_URL ??
+      "https://music-house-nine.vercel.app/api/suno-callback",
+  };
+  if (input.prompt) body.prompt = input.prompt;
+  if (input.style) body.style = input.style;
+  if (input.title) body.title = input.title;
+  if (input.continueAt != null) body.continueAt = input.continueAt;
+
+  const r = await authedFetch("/generate/extend", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`Suno extend ${r.status}: ${await r.text()}`);
+  const j = await r.json();
+  const code = Number(j?.code ?? 200);
+  if (code !== 200) throw new Error(`Suno extend code ${code}: ${String(j?.msg ?? "")}`);
+  const taskId = j?.data?.taskId ?? j?.taskId;
+  if (!taskId) throw new Error(`Suno extend: no taskId in ${JSON.stringify(j).slice(0, 300)}`);
   return { taskId };
 }
 

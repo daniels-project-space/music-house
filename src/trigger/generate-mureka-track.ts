@@ -24,6 +24,7 @@ export type MurekaGenerateInput = {
   prompt?: string;
   lyrics?: string;
   title?: string;
+  genre?: string;
   artistSlug?: string;
   albumSlug?: string;
   instrumental?: boolean;
@@ -39,6 +40,7 @@ export const generateMurekaTrack = task({
     const cx = convexClient();
     logger.info("mureka:start", { jobId: input.jobId });
 
+    try {
     const { taskId, type } = await mureka.generate({
       prompt: input.prompt,
       lyrics: input.lyrics,
@@ -77,6 +79,7 @@ export const generateMurekaTrack = task({
         albumSlug,
         title,
         duration: Math.round((c.duration ?? 0) / 1000),
+        genre: input.genre,
         generator: "mureka",
         audioKey,
         lyrics: input.lyrics && input.lyrics.trim().length > 0 ? parseLyrics(input.lyrics) : undefined,
@@ -87,5 +90,18 @@ export const generateMurekaTrack = task({
     await cx.mutation(api.jobs.setComplete, { id: input.jobId, resultTrackIds: created });
     logger.info("mureka:done", { count: created.length });
     return { trackIds: created };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error("mureka:failed", { jobId: input.jobId, error: message.slice(0, 500) });
+      try {
+        await cx.mutation(api.jobs.setFailed, { id: input.jobId, error: message.slice(0, 1000) });
+      } catch (markFailedError) {
+        logger.error("mureka:failed-to-record-error", {
+          jobId: input.jobId,
+          error: String(markFailedError).slice(0, 500),
+        });
+      }
+      throw error;
+    }
   },
 });

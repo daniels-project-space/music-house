@@ -89,8 +89,10 @@ export type SunoGenerateInput = {
   prompt: string;
   lyrics?: string;
   title?: string;
+  genre?: string;
   artistSlug?: string;
   albumSlug?: string;
+  model?: "V5_5";
   callbackUrl?: string;
 };
 
@@ -100,14 +102,16 @@ export const generateSunoTrack = task({
   // Generation calls are billed and non-idempotent. Never let an infrastructure
   // retry re-run a successful (paid) generation because of a later failure.
   retry: { maxAttempts: 1 },
-  run: async (input: SunoGenerateInput, { ctx }) => {
+  run: async (input: SunoGenerateInput) => {
     const cx = convexClient();
     logger.info("suno:start", { jobId: input.jobId });
 
+    try {
     const { taskId } = await suno.generate({
       prompt: input.prompt,
       lyrics: input.lyrics,
       title: input.title ?? "Untitled",
+      model: input.model ?? "V5_5",
       callbackUrl: input.callbackUrl,
     });
     await cx.mutation(api.jobs.setRunning, { id: input.jobId, triggerRunId: `suno:${taskId}` });
@@ -210,6 +214,7 @@ export const generateSunoTrack = task({
         albumSlug,
         title,
         duration: t.duration,
+        genre: input.genre,
         generator: "suno",
         audioKey,
         coverKey,
@@ -245,5 +250,18 @@ export const generateSunoTrack = task({
     await cx.mutation(api.jobs.setComplete, { id: input.jobId, resultTrackIds: created });
     logger.info("suno:done", { count: created.length });
     return { trackIds: created };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error("suno:failed", { jobId: input.jobId, error: message.slice(0, 500) });
+      try {
+        await cx.mutation(api.jobs.setFailed, { id: input.jobId, error: message.slice(0, 1000) });
+      } catch (markFailedError) {
+        logger.error("suno:failed-to-record-error", {
+          jobId: input.jobId,
+          error: String(markFailedError).slice(0, 500),
+        });
+      }
+      throw error;
+    }
   },
 });

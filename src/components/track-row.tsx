@@ -80,13 +80,13 @@ export function TrackRow({
   const setDistributed = useMutation(api.tracks.setDistributed);
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(title);
-  useEffect(() => setDraftTitle(title), [title]);
   const titleRef = useRef<HTMLInputElement | null>(null);
   const { play, current } = usePlayer();
   const { ensure, get } = useUrlCache();
   const [menuOpen, setMenuOpen] = useState(false);
   const [moveModalOpen, setMoveModalOpen] = useState(false);
   const [lyricsOpen, setLyricsOpen] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
   const [dragOver, setDragOver] = useState<"above" | "below" | null>(null);
   const [distributing, setDistributing] = useState(false);
   const [distributePanelOpen, setDistributePanelOpen] = useState(false);
@@ -153,6 +153,24 @@ export function TrackRow({
     document.body.appendChild(a);
     a.click();
     a.remove();
+  };
+
+  const handleShare = async () => {
+    setMenuOpen(false);
+    const url = `${window.location.origin}/share/track/${trackId}`;
+    try {
+      const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
+      if (nav.share) {
+        await nav.share({ title, text: `Listen to ${title}`, url });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      setShareCopied(true);
+      window.setTimeout(() => setShareCopied(false), 1400);
+    } catch {
+      // Closing the menu is enough when native sharing is dismissed or clipboard
+      // access is blocked by the browser; no privileged action has occurred.
+    }
   };
 
   const isPlaying = current?.id === trackId;
@@ -255,7 +273,7 @@ export function TrackRow({
         ) : (
           <div
             className={(size === "comfortable" ? "text-[0.92rem] " : "text-[0.76rem] ") + "truncate font-display font-medium cursor-text leading-tight " + (isPlaying ? "text-purple" : "text-paper")}
-            onDoubleClick={() => setEditing(true)}
+            onDoubleClick={() => { setDraftTitle(title); setEditing(true); }}
             title="Double-click to rename"
           >
             {title}
@@ -290,7 +308,7 @@ export function TrackRow({
             className="absolute right-0 top-9 z-30 w-44 rounded-md border bg-elevated shadow-2xl py-1 animate-fi"
             style={{ borderColor: "var(--color-brd)" }}
           >
-            <Item icon="✎" label="Rename" onClick={() => { setMenuOpen(false); setEditing(true); }} />
+            <Item icon="✎" label="Rename" onClick={() => { setMenuOpen(false); setDraftTitle(title); setEditing(true); }} />
             <Item icon="♪" label="Lyrics" onClick={() => { setMenuOpen(false); if (onShowLyrics) onShowLyrics(); else setLyricsOpen(true); }} />
             <Item icon="→" label="Move to…" onClick={() => { setMenuOpen(false); setMoveModalOpen(true); }} />
             <Item
@@ -298,6 +316,7 @@ export function TrackRow({
               label={downloadFormat ? `Download · ${downloadFormat}` : "Download"}
               onClick={handleDownload}
             />
+            <Item icon="↗" label={shareCopied ? "Link copied" : "Share"} onClick={handleShare} />
             <Item icon="📡" label="Distribute" onClick={startDistribute} />
             <Item icon="✓" label="Mark distributed" onClick={() => { setDistributed({ id: trackId, distributed: true }); setMenuOpen(false); }} />
             <div className="my-1 mx-2 h-px bg-brd" />
