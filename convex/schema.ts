@@ -55,7 +55,7 @@ export default defineSchema({
     title: v.string(),
     duration: v.optional(v.number()),
     genre: v.optional(v.string()),
-    generator: v.union(v.literal("suno"), v.literal("mureka"), v.literal("import")),
+    generator: v.union(v.literal("suno"), v.literal("mureka"), v.literal("minimax"), v.literal("import")),
     audioKey: v.string(),
     flacKey: v.optional(v.string()),
     instrumentalKey: v.optional(v.string()), // cached vocals-removed stem (backing track / karaoke)
@@ -135,7 +135,7 @@ export default defineSchema({
     .index("by_track", ["trackId"]),
 
   generationJobs: defineTable({
-    generator: v.union(v.literal("suno"), v.literal("mureka")),
+    generator: v.union(v.literal("suno"), v.literal("mureka"), v.literal("minimax")),
     status: v.union(
       v.literal("pending"),
       v.literal("running"),

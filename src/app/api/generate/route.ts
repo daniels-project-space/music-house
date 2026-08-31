@@ -14,14 +14,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "JSON object required" }, { status: 400 });
   }
 
-  const generator = body.generator ?? "suno";
+  const generator = body.generator ?? "minimax";
   const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
   const lyrics = typeof body.lyrics === "string" && body.lyrics.trim() ? body.lyrics.trim() : undefined;
   const title = typeof body.title === "string" && body.title.trim() ? body.title.trim() : undefined;
   const genre = typeof body.genre === "string" && body.genre.trim() ? body.genre.trim() : undefined;
 
-  if (generator !== "suno") {
-    return NextResponse.json({ error: "The Studio currently renders with Suno only." }, { status: 400 });
+  if (generator !== "suno" && generator !== "minimax") {
+    return NextResponse.json({ error: "Choose Suno or MiniMax Music3." }, { status: 400 });
   }
   if (!prompt) return NextResponse.json({ error: "render brief required" }, { status: 400 });
   if (prompt.length > 1000) return NextResponse.json({ error: "render brief must be 1000 characters or fewer" }, { status: 400 });
@@ -29,9 +29,8 @@ export async function POST(req: NextRequest) {
   if (title && title.length > 100) return NextResponse.json({ error: "title must be 100 characters or fewer" }, { status: 400 });
   if (lyrics && lyrics.length > 5000) return NextResponse.json({ error: "lyrics must be 5000 characters or fewer" }, { status: 400 });
 
-  // Suno's custom-mode `style` field is where genre and production direction
-  // belong. Preserve the genre independently too, so the resulting catalog
-  // track remains filterable after the job has finished.
+  // Both engines work best when genre and production direction live in one
+  // focused caption. Keep genre separately too so finished tracks stay filterable.
   const stylePrompt = genre ? `${genre}. ${prompt}` : prompt;
 
   const cx = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
@@ -46,22 +45,28 @@ export async function POST(req: NextRequest) {
   }
 
   const jobId = await cx.mutation(api.jobs.create, {
-    generator: "suno",
+    generator,
     prompt: stylePrompt,
     lyrics,
-    config: { title, genre, model: "V5_5", delivery: "lossless WAV master" },
+    config: generator === "minimax"
+      ? { title, genre, model: "MiniMaxAI/MiniMax-Music3", delivery: "32 kHz stereo WAV", gpu: "isolated RTX 4090 spot" }
+      : { title, genre, model: "V5_5", delivery: "lossless WAV master" },
   });
 
   try {
-    const handle = await tasks.trigger("generate-suno-track", {
+    const taskId = generator === "minimax" ? "generate-minimax-music3-track" : "generate-suno-track";
+    const handle = await tasks.trigger(taskId, {
       jobId,
       prompt: stylePrompt,
       lyrics,
       title,
       genre,
-      model: "V5_5" as const,
     });
-    return NextResponse.json({ jobId, runId: handle.id, quality: "lossless WAV master" });
+    return NextResponse.json({
+      jobId,
+      runId: handle.id,
+      quality: generator === "minimax" ? "32 kHz stereo WAV" : "lossless WAV master",
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown Trigger error";
     await cx.mutation(api.jobs.setFailed, {

@@ -33,7 +33,7 @@ export const insert = mutation({
     title: v.string(),
     duration: v.optional(v.number()),
     genre: v.optional(v.string()),
-    generator: v.union(v.literal("suno"), v.literal("mureka"), v.literal("import")),
+    generator: v.union(v.literal("suno"), v.literal("mureka"), v.literal("minimax"), v.literal("import")),
     audioKey: v.string(),
     flacKey: v.optional(v.string()),
     instrumentalKey: v.optional(v.string()),

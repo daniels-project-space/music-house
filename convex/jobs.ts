@@ -16,7 +16,7 @@ export const get = query({
 
 export const create = mutation({
   args: {
-    generator: v.union(v.literal("suno"), v.literal("mureka")),
+    generator: v.union(v.literal("suno"), v.literal("mureka"), v.literal("minimax")),
     artistSlug: v.optional(v.string()),
     albumSlug: v.optional(v.string()),
     prompt: v.string(),

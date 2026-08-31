@@ -17,7 +17,7 @@ type TrackRowProps = {
   artistSlug: string;
   albumSlug?: string;
   duration?: number;
-  generator: "suno" | "mureka" | "import";
+  generator: "suno" | "mureka" | "minimax" | "import";
   audioKey: string;
   /** Lossless master, when one exists. Preferred over audioKey for downloads. */
   flacKey?: string;

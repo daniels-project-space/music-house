@@ -8,12 +8,14 @@ import { TrackRow, useHeartedSet } from "@/components/track-row";
 import type { PlayerTrack } from "@/components/player-context";
 
 type Feedback = { kind: "ok" | "err"; message: string } | null;
+type Generator = "suno" | "minimax";
 
 export default function StudioPage() {
   const [title, setTitle] = useState("");
   const [genre, setGenre] = useState("");
   const [prompt, setPrompt] = useState("");
   const [lyrics, setLyrics] = useState("");
+  const [generator, setGenerator] = useState<Generator>("minimax");
   const [submitting, setSubmitting] = useState(false);
   const [enhancing, setEnhancing] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
@@ -51,7 +53,7 @@ export default function StudioPage() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          generator: "suno",
+          generator,
           title: title || undefined,
           genre: genre || undefined,
           prompt,
@@ -94,7 +96,7 @@ export default function StudioPage() {
       const result = await response.json();
       if (!response.ok || !result.enhanced) throw new Error(result.error ?? "Could not enhance the brief");
       setPrompt(result.enhanced);
-      setFeedback({ kind: "ok", message: "Suno-ready structure added. Review it, then generate when it feels right." });
+      setFeedback({ kind: "ok", message: "A focused music prompt was added. Review it, then generate when it feels right." });
     } catch (error) {
       setFeedback({
         kind: "err",
@@ -124,14 +126,15 @@ export default function StudioPage() {
       <section className="rounded-lg border border-brd bg-card p-4 sm:p-5">
         <div className="mb-5 flex items-center justify-between gap-3">
           <div>
-            <p className="label-mono">Suno renderer</p>
+            <p className="label-mono">Music renderer</p>
             <p className="mt-1 font-mono text-[0.58rem] uppercase tracking-[0.14em] text-t4">
               Your brief is sent directly — no hidden prompt rewriting
             </p>
           </div>
-          <span className="rounded-full border border-pink/30 bg-pink/[0.07] px-2 py-1 font-mono text-[0.55rem] uppercase tracking-[0.14em] text-pink">
-            V5.5
-          </span>
+          <div className="flex rounded-md border border-brd bg-paper/[0.03] p-0.5" role="group" aria-label="Render engine">
+            <EngineButton selected={generator === "minimax"} onClick={() => setGenerator("minimax")}>MiniMax Music3</EngineButton>
+            <EngineButton selected={generator === "suno"} onClick={() => setGenerator("suno")}>Suno V5.5</EngineButton>
+          </div>
         </div>
 
         <form onSubmit={generate} className="space-y-4">
@@ -149,7 +152,7 @@ export default function StudioPage() {
                 disabled={enhancing || !prompt.trim()}
                 className="font-mono text-[0.58rem] uppercase tracking-[0.14em] text-purple transition-colors hover:text-pink disabled:cursor-not-allowed disabled:opacity-35"
               >
-                {enhancing ? "Enhancing…" : "✦ Enhance for Suno"}
+                {enhancing ? "Enhancing…" : generator === "suno" ? "✦ Enhance for Suno" : "✦ Enhance prompt"}
               </button>
             </span>
             <textarea
@@ -160,13 +163,13 @@ export default function StudioPage() {
               className="min-h-28 w-full rounded-md border border-brd bg-paper/[0.04] p-3 text-[0.9rem] leading-relaxed text-t1 outline-none transition-colors focus:border-purple/50"
             />
             <p className="text-[0.72rem] text-t3">
-              Describe instruments, voice, mood, tempo, and song structure. Avoid artist names — Suno rejects those requests.
+              Describe instruments, voice, mood, tempo, and song structure. Avoid artist names; clear musical traits give both engines better results.
             </p>
           </label>
 
           <details className="rounded-md border border-brd/70 bg-paper/[0.015] px-3 py-2.5">
             <summary className="cursor-pointer font-mono text-[0.6rem] uppercase tracking-[0.14em] text-t2">
-              Suno prompt guide
+              Prompt guide
             </summary>
             <ul className="mt-3 space-y-1.5 pl-4 text-[0.75rem] leading-relaxed text-t3 marker:text-purple list-disc">
               <li>Lead with genre, then name the mood, instruments, vocal character, and energy or tempo.</li>
@@ -206,7 +209,7 @@ export default function StudioPage() {
               boxShadow: "0 8px 24px rgba(236,72,153,0.18)",
             }}
           >
-            {submitting ? "Starting render…" : "Generate song"}
+            {submitting ? "Starting render…" : generator === "minimax" ? "Generate with MiniMax Music3" : "Generate with Suno"}
           </button>
 
           {feedback ? <FeedbackNotice feedback={feedback} /> : null}
@@ -313,17 +316,33 @@ function FeedbackNotice({ feedback }: { feedback: Exclude<Feedback, null> }) {
   );
 }
 
-function RenderBuffer({ job }: { job: { _id: string; prompt: string; status: string } }) {
+function RenderBuffer({ job }: { job: { _id: string; prompt: string; status: string; generator: Generator } }) {
   return (
     <div className="flex items-center gap-3 rounded-md border border-amber/30 bg-amber/[0.045] px-3 py-3">
       <span aria-label="Rendering" className="h-4 w-4 shrink-0 rounded-full border-2 border-amber/30 border-t-amber animate-spin" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm text-t1" title={job.prompt}>{job.prompt}</p>
         <p className="mt-1 font-mono text-[0.55rem] uppercase tracking-[0.15em] text-amber">
-          {job.status === "pending" ? "Starting Suno render…" : "Suno is rendering your song…"}
+          {job.status === "pending"
+            ? `Starting ${job.generator === "minimax" ? "MiniMax" : "Suno"} render…`
+            : `${job.generator === "minimax" ? "MiniMax on your dedicated 4090" : "Suno"} is rendering your song…`}
         </p>
       </div>
     </div>
+  );
+}
+
+function EngineButton({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onClick}
+      className={"rounded px-2 py-1 font-mono text-[0.52rem] uppercase tracking-[0.11em] transition-colors " +
+        (selected ? "bg-purple/20 text-purple" : "text-t4 hover:text-t2")}
+    >
+      {children}
+    </button>
   );
 }
 
