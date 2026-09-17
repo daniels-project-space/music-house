@@ -2,6 +2,7 @@
 
 import { useMemo, useState, Suspense } from "react";
 import { useMutation, useQuery } from "convex/react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api } from "../../../../convex/_generated/api";
 import { AlbumCard } from "@/components/album-card";
@@ -153,7 +154,7 @@ function LibraryInner() {
         {stage && (
           <span className="fbtn on flex items-center gap-2" style={{ borderColor: "rgba(236,72,153,0.5)" }}>
             <span className="font-mono uppercase">stage: {stage}</span>
-            <a href="/library" className="font-mono text-paper-faint hover:text-paper">×</a>
+            <Link href="/library" className="font-mono text-paper-faint hover:text-paper">×</Link>
           </span>
         )}
         <span className="ml-auto font-mono text-[0.55rem] uppercase tracking-[0.18em] text-paper-faint">
@@ -307,7 +308,7 @@ function UnsortedTracks({
     artistSlug: string;
     albumSlug?: string;
     duration?: number;
-    generator: "suno" | "mureka" | "import";
+    generator: "suno" | "mureka" | "minimax" | "import";
     audioKey: string;
     flacKey?: string;
     trackNum?: number;

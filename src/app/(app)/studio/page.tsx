@@ -8,7 +8,7 @@ import { TrackRow, useHeartedSet } from "@/components/track-row";
 import type { PlayerTrack } from "@/components/player-context";
 
 type Feedback = { kind: "ok" | "err"; message: string } | null;
-type Generator = "suno" | "minimax";
+type Generator = "suno" | "mureka" | "minimax";
 
 export default function StudioPage() {
   const [title, setTitle] = useState("");
