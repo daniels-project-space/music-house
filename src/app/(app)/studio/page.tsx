@@ -194,7 +194,7 @@ export default function StudioPage() {
 
           <details className="rounded-md border border-brd/70 bg-paper/[0.015] px-3 py-2.5">
             <summary className="cursor-pointer font-mono text-[0.6rem] uppercase tracking-[0.14em] text-t2">
-              Add or reuse lyrics (optional)
+              Add or reuse lyrics ({generator === "minimax" ? "required for Music3" : "optional"})
             </summary>
             <div className="mt-3 space-y-3">
               <SavedLyricsPicker
@@ -204,6 +204,7 @@ export default function StudioPage() {
                 }}
               />
               <textarea
+                required={generator === "minimax"}
                 value={lyrics}
                 onChange={(event) => setLyrics(event.target.value)}
                 placeholder={'[Verse 1]\nLay them down where the rain wears thin…'}
@@ -215,7 +216,7 @@ export default function StudioPage() {
 
           <button
             type="submit"
-            disabled={submitting || !prompt.trim()}
+            disabled={submitting || !prompt.trim() || (generator === "minimax" && !lyrics.trim())}
             className="w-full rounded-md px-4 py-3 font-display text-[1rem] font-semibold text-white transition-all hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-35"
             style={{
               background: "linear-gradient(90deg, #ec4899, #8b5cf6)",
