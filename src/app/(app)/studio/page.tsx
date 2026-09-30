@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { TrackRow, useHeartedSet } from "@/components/track-row";
@@ -21,6 +21,15 @@ export default function StudioPage() {
   const [feedback, setFeedback] = useState<Feedback>(null);
 
   const jobs = useQuery(api.jobs.list, {}) ?? [];
+  const engineJobIds = jobs.filter((job) => job.config?.engine && ["pending", "running"].includes(job.status)).map(job => job._id).join(",");
+  useEffect(() => {
+    if (!engineJobIds) return;
+    const controller = new AbortController();
+    const poll = () => Promise.all(engineJobIds.split(",").map(id => fetch(`/api/jobs/${id}`, { signal: controller.signal, cache: "no-store" }).catch(() => undefined)));
+    void poll();
+    const timer = setInterval(() => { void poll(); }, 15_000);
+    return () => { controller.abort(); clearInterval(timer); };
+  }, [engineJobIds]);
   const tracks = useQuery(api.tracks.list, {}) ?? [];
   const hearted = useHeartedSet();
 
@@ -65,7 +74,11 @@ export default function StudioPage() {
 
       setFeedback({
         kind: "ok",
-        message: lyrics.trim()
+        message: result.state === "awaiting-final-qualification"
+          ? "Lyrics saved. Your Music3 request is waiting for Final qualification."
+          : result.state
+            ? "Lyrics saved. Your Music3 request was accepted. Its current state appears below."
+            : lyrics.trim()
           ? "Lyrics saved. Your song is rendering below."
           : "Your song is rendering below.",
       });
@@ -219,8 +232,8 @@ export default function StudioPage() {
       <section id="finished-songs" className="mt-5 rounded-lg border border-brd bg-card p-4 sm:p-5">
         <div className="mb-4 flex items-center justify-between gap-3 border-b border-brd/70 pb-3">
           <div>
-            <p className="label-mono">Rendering now</p>
-            <p className="mt-1 text-xs text-t3">Keep this page open if you like; completed songs will appear below automatically.</p>
+            <p className="label-mono">Song requests</p>
+            <p className="mt-1 text-xs text-t3">Keep this page open if you like; Music3 status updates here; verified WAV downloads appear when complete.</p>
           </div>
           <span className="label-mono">{activeJobs.length} active</span>
         </div>
@@ -256,6 +269,12 @@ export default function StudioPage() {
         ) : null}
       </section>
 
+      {jobs.filter(job => job.config?.engine && job.status === "complete").map(job => (
+        <div key={job._id} className="mt-4 rounded-lg border border-brd bg-card p-4">
+          <p className="text-sm text-t1">{job.config?.title ?? "Music3 song"}</p>
+          <a href={`/api/jobs/${job._id}/output`} className="text-sm text-purple">Download verified stereo WAV</a>
+        </div>
+      ))}
       <section className="mt-5 rounded-lg border border-brd bg-card p-4 sm:p-5">
         <div className="mb-4 flex items-center justify-between gap-3 border-b border-brd/70 pb-3">
           <div>
@@ -316,16 +335,18 @@ function FeedbackNotice({ feedback }: { feedback: Exclude<Feedback, null> }) {
   );
 }
 
-function RenderBuffer({ job }: { job: { _id: string; prompt: string; status: string; generator: Generator } }) {
+function RenderBuffer({ job }: { job: { _id: string; prompt: string; status: string; generator: Generator; config?: { engine?: { state: string } } } }) {
   return (
     <div className="flex items-center gap-3 rounded-md border border-amber/30 bg-amber/[0.045] px-3 py-3">
-      <span aria-label="Rendering" className="h-4 w-4 shrink-0 rounded-full border-2 border-amber/30 border-t-amber animate-spin" />
+      <span aria-label="Request status" className="h-4 w-4 shrink-0 rounded-full border-2 border-amber/30 border-t-amber animate-spin" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm text-t1" title={job.prompt}>{job.prompt}</p>
         <p className="mt-1 font-mono text-[0.55rem] uppercase tracking-[0.15em] text-amber">
-          {job.status === "pending"
+          {job.config?.engine
+            ? job.config.engine.state.replaceAll("-", " ")
+            : job.status === "pending"
             ? `Starting ${job.generator === "minimax" ? "MiniMax" : "Suno"} render…`
-            : `${job.generator === "minimax" ? "MiniMax on your dedicated 4090" : "Suno"} is rendering your song…`}
+            : `${job.generator === "minimax" ? "MiniMax Music3" : "Suno"} is rendering your song…`}
         </p>
       </div>
     </div>

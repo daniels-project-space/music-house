@@ -14,10 +14,12 @@ export default function JobsPage() {
             <div className="flex-1">
               <div className="text-paper text-sm">{j.prompt.slice(0, 80)}</div>
               <div className="text-paper-dim font-mono text-xs mt-1">{j.generator} · {new Date(j.createdAt).toISOString().slice(0, 19)}</div>
+              {j.config?.engine && <a href={`/api/jobs/${j._id}`} className="text-purple text-xs">Refresh engine status</a>}
+              {j.config?.engine && j.status === "complete" && <a href={`/api/jobs/${j._id}/output`} className="text-purple text-xs ml-3">Download verified WAV</a>}
               {j.error && <div className="text-red-400 font-mono text-xs mt-1">{j.error}</div>}
             </div>
             <span className={`font-mono text-xs uppercase tracking-wider px-2 py-1 rounded ${j.status === 'complete' ? 'bg-green-900/30 text-green-400' : j.status === 'failed' ? 'bg-red-900/30 text-red-400' : j.status === 'running' ? 'bg-amber/20 text-amber' : 'bg-paper/10 text-paper-dim'}`}>
-              {j.status}
+              {j.config?.engine?.state?.replaceAll("-", " ") ?? j.status}
             </span>
           </div>
         ))}

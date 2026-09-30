@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../convex/_generated/api";
+import { randomBytes } from "node:crypto";
+import { music3EngineConfig, stageMusic3Engine } from "@/lib/render-engine-music3";
 import { tasks } from "@trigger.dev/sdk/v3";
 
 export async function POST(req: NextRequest) {
@@ -16,7 +18,7 @@ export async function POST(req: NextRequest) {
 
   const generator = body.generator ?? "minimax";
   const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
-  const lyrics = typeof body.lyrics === "string" && body.lyrics.trim() ? body.lyrics.trim() : undefined;
+  const lyrics = typeof body.lyrics === "string" && body.lyrics.trim() ? body.lyrics : undefined;
   const title = typeof body.title === "string" && body.title.trim() ? body.title.trim() : undefined;
   const genre = typeof body.genre === "string" && body.genre.trim() ? body.genre.trim() : undefined;
 
@@ -45,10 +47,20 @@ export async function POST(req: NextRequest) {
   }
 
   if (generator === "minimax") {
-    return NextResponse.json(
-      { error: "MiniMax Music3 is waiting for its qualified Render Engine route. Any submitted lyrics were saved." },
-      { status: 503 },
-    );
+    if (!lyrics) return NextResponse.json({ error: "Music3 requires source lyrics. They can include an instrumental section tag." }, { status: 400 });
+    try { music3EngineConfig(); } catch {
+      return NextResponse.json({ error: "Music3 Render Engine connection is not configured. Your lyrics were saved." }, { status: 503 });
+    }
+    const jobId = await cx.mutation(api.jobs.create, { generator, prompt: stylePrompt, lyrics,
+      config: { title, genre, model: "MiniMax-Music3", delivery: "verified stereo WAV master" } });
+    try {
+      const binding = await stageMusic3Engine({ sourceId: jobId, lyrics, description: stylePrompt, seed: randomBytes(4).readUInt32LE() });
+      await cx.mutation(api.jobs.setEngineBinding, { id: jobId, binding });
+      return NextResponse.json({ jobId, state: binding.state, quality: "verified stereo WAV master" }, { status: 202 });
+    } catch {
+      await cx.mutation(api.jobs.setFailed, { id: jobId, error: "Music3 engine admission could not be verified. Source lyrics remain saved." });
+      return NextResponse.json({ error: "Music3 engine admission could not be verified. Source lyrics remain saved." }, { status: 502 });
+    }
   }
 
   const jobId = await cx.mutation(api.jobs.create, {
