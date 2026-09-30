@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../convex/_generated/api";
+import { renderWorkerTokenDigest, issueRenderMutationProof } from "@/lib/render-session";
+import { renderAuthentication } from "@/lib/render-auth";
 import { randomBytes } from "node:crypto";
 import { music3EngineConfig, stageMusic3Engine } from "@/lib/render-engine-music3";
 import { tasks } from "@trigger.dev/sdk/v3";
 
 export async function POST(req: NextRequest) {
+  const auth = await renderAuthentication(req);
+  if (auth.response) return auth.response;
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -51,19 +55,24 @@ export async function POST(req: NextRequest) {
     try { music3EngineConfig(); } catch {
       return NextResponse.json({ error: "Music3 Render Engine connection is not configured. Your lyrics were saved." }, { status: 503 });
     }
-    const jobId = await cx.mutation(api.jobs.create, { generator, prompt: stylePrompt, lyrics,
+    const jobId = await cx.mutation(api.jobs.create, { sessionToken: auth.sessionToken, generator, prompt: stylePrompt, lyrics,
       config: { title, genre, model: "MiniMax-Music3", delivery: "verified stereo WAV master" } });
     try {
       const binding = await stageMusic3Engine({ sourceId: jobId, lyrics, description: stylePrompt, seed: randomBytes(4).readUInt32LE() });
-      await cx.mutation(api.jobs.setEngineBinding, { id: jobId, binding });
+      await cx.mutation(api.jobs.setEngineBinding, { id: jobId, binding, sessionToken: auth.sessionToken, serverProof: await issueRenderMutationProof("bind-engine", auth.identity.subject, { id: jobId, binding }, process.env.MUSIC_HOUSE_RENDER_SESSION_SECRET) });
       return NextResponse.json({ jobId, state: binding.state, quality: "verified stereo WAV master" }, { status: 202 });
     } catch {
-      await cx.mutation(api.jobs.setFailed, { id: jobId, error: "Music3 engine admission could not be verified. Source lyrics remain saved." });
+      const error = "Music3 engine admission could not be verified. Source lyrics remain saved.";
+      await cx.mutation(api.jobs.setFailed, { id: jobId, error, sessionToken: auth.sessionToken,
+        serverProof: await issueRenderMutationProof("fail-engine", auth.identity.subject, { id: jobId, error }, process.env.MUSIC_HOUSE_RENDER_SESSION_SECRET) });
       return NextResponse.json({ error: "Music3 engine admission could not be verified. Source lyrics remain saved." }, { status: 502 });
     }
   }
 
+  const workerToken = randomBytes(32).toString("hex");
   const jobId = await cx.mutation(api.jobs.create, {
+    workerTokenSha256: await renderWorkerTokenDigest(workerToken),
+    sessionToken: auth.sessionToken,
     generator,
     prompt: stylePrompt,
     lyrics,
@@ -73,6 +82,7 @@ export async function POST(req: NextRequest) {
   try {
     const handle = await tasks.trigger("generate-suno-track", {
       jobId,
+      workerToken,
       prompt: stylePrompt,
       lyrics,
       title,
@@ -87,6 +97,7 @@ export async function POST(req: NextRequest) {
     const message = error instanceof Error ? error.message : "Unknown Trigger error";
     await cx.mutation(api.jobs.setFailed, {
       id: jobId,
+      workerToken,
       error: `Could not start render worker: ${message.slice(0, 700)}`,
     }).catch(() => undefined);
     return NextResponse.json(
