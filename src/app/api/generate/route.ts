@@ -44,18 +44,22 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  if (generator === "minimax") {
+    return NextResponse.json(
+      { error: "MiniMax Music3 is waiting for its qualified Render Engine route. Any submitted lyrics were saved." },
+      { status: 503 },
+    );
+  }
+
   const jobId = await cx.mutation(api.jobs.create, {
     generator,
     prompt: stylePrompt,
     lyrics,
-    config: generator === "minimax"
-      ? { title, genre, model: "MiniMaxAI/MiniMax-Music3", delivery: "32 kHz stereo WAV", gpu: "isolated RTX 4090 spot" }
-      : { title, genre, model: "V5_5", delivery: "lossless WAV master" },
+    config: { title, genre, model: "V5_5", delivery: "lossless WAV master" },
   });
 
   try {
-    const taskId = generator === "minimax" ? "generate-minimax-music3-track" : "generate-suno-track";
-    const handle = await tasks.trigger(taskId, {
+    const handle = await tasks.trigger("generate-suno-track", {
       jobId,
       prompt: stylePrompt,
       lyrics,
@@ -65,7 +69,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       jobId,
       runId: handle.id,
-      quality: generator === "minimax" ? "32 kHz stereo WAV" : "lossless WAV master",
+      quality: "lossless WAV master",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown Trigger error";
