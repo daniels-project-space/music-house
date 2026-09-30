@@ -51,3 +51,26 @@ export const findByTriggerRun = query({
   handler: async (ctx, { triggerRunId }) =>
     ctx.db.query("generationJobs").withIndex("by_trigger_run", (q) => q.eq("triggerRunId", triggerRunId)).first(),
 });
+
+/** Persist the verified engine admission without claiming an audio result. */
+export const setEngineBinding = mutation({
+  args: { id: v.id("generationJobs"), binding: v.object({ jobId: v.string(), state: v.string(), manifestSha256: v.string(),
+    output: v.object({ bucket: v.string(), key: v.string(), receiptKey: v.string() }) }) },
+  handler: async (ctx, { id, binding }) => {
+    const job = await ctx.db.get(id);
+    if (!job || job.generator !== "minimax" || job.status !== "pending" || job.config?.engine) throw new Error("Music3 job binding changed");
+    await ctx.db.patch(id, { config: { ...job.config, engine: binding } });
+  },
+});
+export const syncEngineState = mutation({
+  args: { id: v.id("generationJobs"), engineJobId: v.string(), state: v.string() },
+  handler: async (ctx, { id, engineJobId, state }) => {
+    const job = await ctx.db.get(id);
+    if (!job || job.generator !== "minimax" || job.config?.engine?.jobId !== engineJobId || ["complete", "failed"].includes(job.status)) return;
+    const status = state === "completed" ? "complete" : ["failed", "cancelled"].includes(state) ? "failed" :
+      ["launching", "running", "shutdown-requested"].includes(state) ? "running" : "pending";
+    await ctx.db.patch(id, { status, config: { ...job.config, engine: { ...job.config.engine, state } },
+      ...(status === "complete" || status === "failed" ? { completedAt: Date.now() } : {}),
+      ...(status === "failed" ? { error: `Music3 engine job ${state}` } : {}) });
+  },
+});
