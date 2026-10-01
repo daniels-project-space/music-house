@@ -35,6 +35,7 @@ export const create = mutation({
   },
   handler: async (ctx, { sessionToken, ...args }) => {
     const identity = await requireRenderIdentity(sessionToken);
+    if (args.config && typeof args.config === "object" && "engine" in args.config) throw new Error("Engine binding requires trusted server admission");
     if (args.generator !== "minimax" && !/^[a-f0-9]{64}$/.test(args.workerTokenSha256 ?? "")) throw new Error("Render worker capability required");
     return ctx.db.insert("generationJobs", { ...args, ownerSubject: identity.subject, status: "pending", createdAt: Date.now() });
   },

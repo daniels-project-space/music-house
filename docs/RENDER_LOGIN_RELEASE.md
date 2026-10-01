@@ -46,3 +46,16 @@ Trigger workers do **not** need the session secret or Google client secret. The 
 6. Complete a real approved-account browser login without submitting a render. Verify `/api/auth/session` is authenticated, the owned-job list contains no foreign jobs, cross-origin POSTs return 403, and anonymous/foreign status and output reads remain rejected. Do not treat a 503 missing-configuration response as a completed login feature.
 
 [Trigger deployment documentation](https://trigger.dev/docs/deployment/overview) describes `--skip-promotion` and version locking. Project Hub's `docs/project-setup.md` requires deploying each app's own Convex and Trigger backends before verifying its website production alias. No step authorizes paid renders, distribution, schedule activation, or replaying existing runs.
+
+## Tenant security regression checks
+
+Job creation rejects caller-supplied `config.engine`; only a server-signed admission can bind an engine job. Generic catalog signers (`presign`, `download`, `audio`, `video`, `cover`) reject the reserved `projects/` namespace regardless of login. Private engine outputs use the owned job output endpoint and its verified receipt check.
+
+Run the actual route regressions without contacting providers:
+
+```sh
+node --require ./tests/public-media-register.cjs --import tsx --test tests/public-media-routes.test.ts tests/render-auth.test.ts tests/render-engine-music3.test.ts
+npx tsc --noEmit
+```
+
+The standalone test preload resolves Next's server-only marker; fake vault data supplies test signing credentials, and no R2/provider request is made.

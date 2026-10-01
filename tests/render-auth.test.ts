@@ -49,6 +49,7 @@ test("direct Convex callers cannot create anonymous jobs, adopt foreign jobs, or
     const ctx={db:{insert:async(_table:string,args:any)=>{rows.push({_id:"job-a",...args});return"job-a";},get:async()=>rows[0],patch:async(_id:string,args:any)=>Object.assign(rows[0],args),query:()=>({withIndex:(_name:string,q:any)=>{let subject="";q({eq:(_f:string,v:string)=>{subject=v;}});return{order:()=>({take:async()=>rows.filter(r=>r.ownerSubject===subject)})};}})}};
     const args={generator:"minimax",prompt:"Warm acoustic pop",lyrics:"[verse]\nSource",config:{},sessionToken:token};
     await assert.rejects(handler(create)(ctx,{...args,sessionToken:"forged"}),/login/);assert.equal(rows.length,0);
+    await assert.rejects(handler(create)(ctx,{...args,config:{engine:{jobId:"foreign-engine",output:{bucket:"music-house",key:"projects/music-house/jobs/foreign-engine/music3.wav"}}}}),/trusted server admission/);assert.equal(rows.length,0);
     await handler(create)(ctx,args);assert.equal(rows[0].ownerSubject,"google:owner-a");assert.equal(rows[0].sessionToken,undefined);
     await assert.rejects(handler(setRunning)(ctx,{id:"job-a"}),/verified engine/);
     await assert.rejects(handler(setComplete)(ctx,{id:"job-a",resultTrackIds:[]}),/verified engine/);
