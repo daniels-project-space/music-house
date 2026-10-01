@@ -135,6 +135,8 @@ export default defineSchema({
     .index("by_track", ["trackId"]),
 
   generationJobs: defineTable({
+    ownerSubject: v.optional(v.string()),
+    workerTokenSha256: v.optional(v.string()),
     generator: v.union(v.literal("suno"), v.literal("mureka"), v.literal("minimax")),
     status: v.union(
       v.literal("pending"),
@@ -155,7 +157,8 @@ export default defineSchema({
     completedAt: v.optional(v.number()),
   })
     .index("by_status", ["status"])
-    .index("by_trigger_run", ["triggerRunId"]),
+    .index("by_trigger_run", ["triggerRunId"])
+    .index("by_owner", ["ownerSubject"]),
 
   distributionJobs: defineTable({
     trackId: v.id("tracks"),

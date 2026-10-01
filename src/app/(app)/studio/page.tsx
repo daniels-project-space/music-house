@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRenderLogin } from "@/components/use-render-login";
 import { useEffect, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -20,8 +21,10 @@ export default function StudioPage() {
   const [enhancing, setEnhancing] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
 
-  const jobs = useQuery(api.jobs.list, {}) ?? [];
-  const engineJobIds = jobs.filter((job) => job.config?.engine && ["pending", "running"].includes(job.status)).map(job => job._id).join(",");
+  const { authenticated, ownJobs } = useRenderLogin();
+  const publicJobs = useQuery(api.jobs.list, {}) ?? [];
+  const jobs = [...ownJobs, ...publicJobs];
+  const engineJobIds = ownJobs.filter((job) => job.config?.engine && ["pending", "running"].includes(job.status)).map(job => job._id).join(",");
   useEffect(() => {
     if (!engineJobIds) return;
     const controller = new AbortController();
@@ -216,7 +219,7 @@ export default function StudioPage() {
 
           <button
             type="submit"
-            disabled={submitting || !prompt.trim() || (generator === "minimax" && !lyrics.trim())}
+            disabled={!authenticated || submitting || !prompt.trim() || (generator === "minimax" && !lyrics.trim())}
             className="w-full rounded-md px-4 py-3 font-display text-[1rem] font-semibold text-white transition-all hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-35"
             style={{
               background: "linear-gradient(90deg, #ec4899, #8b5cf6)",
@@ -226,6 +229,7 @@ export default function StudioPage() {
             {submitting ? "Starting render…" : generator === "minimax" ? "Generate with MiniMax Music3" : "Generate with Suno"}
           </button>
 
+          {!authenticated && <a href="/api/auth/login" className="block rounded-md border border-brd p-3 text-sm text-purple">Log in with Google to render. Viewing stays public.</a>}
           {feedback ? <FeedbackNotice feedback={feedback} /> : null}
         </form>
       </section>

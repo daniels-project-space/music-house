@@ -6,10 +6,11 @@ import { GET as audio } from "../src/app/api/audio/route";
 import { GET as video } from "../src/app/api/video/route";
 import { GET as cover } from "../src/app/api/cover/route";
 import { GET as download } from "../src/app/api/download/route";
+import { issueRenderSession, RENDER_SESSION_COOKIE } from "../src/lib/render-session";
 import { isPublicMediaKey } from "../src/lib/public-media-key";
 const key=`projects/music-house/jobs/${"a".repeat(32)}/music3.wav`;
-test("actual generic routes never sign private engine keys, with or without a session cookie",async()=>{
-  const cookie="music-house-login=test-only-cookie";
+test("actual generic routes never sign private engine keys, with or without owner login",async()=>{
+  const cookie=`${RENDER_SESSION_COOKIE}=${await issueRenderSession("google:other-user","other@example.com","test-only-session-secret-123456789012345")}`;
   for(const headers of [{},{cookie}] as Record<string,string>[]) {
     for(const route of [audio,video,cover,download]) {
       const response=await route(new NextRequest(`https://music-house.example/api/media?key=${encodeURIComponent(key)}`,{headers}));
