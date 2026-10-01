@@ -1,3 +1,4 @@
+import { isPublicMediaKey } from "@/lib/public-media-key";
 import { NextRequest, NextResponse } from "next/server";
 import { presignDownload } from "@/lib/storage";
 
@@ -5,6 +6,7 @@ import { presignDownload } from "@/lib/storage";
 export async function GET(req: NextRequest) {
   const key = req.nextUrl.searchParams.get("key");
   if (!key) return NextResponse.json({ error: "key required" }, { status: 400 });
+  if (!isPublicMediaKey(key)) return NextResponse.json({ error: "Asset not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
   try {
     const url = await presignDownload(key, 6 * 3600);
     // ?redirect=1 → 302 to the object (for a direct download/open link);
