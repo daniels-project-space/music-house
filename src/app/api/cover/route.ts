@@ -1,3 +1,4 @@
+import { isPublicMediaKey } from "@/lib/public-media-key";
 /**
  * Cover-image proxy for the public funnel page (`/r/...`).
  *
@@ -17,6 +18,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const key = req.nextUrl.searchParams.get("key");
   if (!key) return new NextResponse("missing key", { status: 400 });
+  if (!isPublicMediaKey(key)) return NextResponse.json({ error: "Asset not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
   try {
     const url = await presignDownload(key, 3600);
     // 302 (not 301) — the presigned target rotates, so it must not be cached as

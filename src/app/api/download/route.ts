@@ -1,3 +1,4 @@
+import { isPublicMediaKey } from "@/lib/public-media-key";
 import { NextRequest, NextResponse } from "next/server";
 import { presignAttachment } from "@/lib/storage";
 
@@ -18,6 +19,7 @@ const CONTENT_TYPES: Record<string, string> = {
 export async function GET(req: NextRequest) {
   const key = req.nextUrl.searchParams.get("key");
   if (!key) return NextResponse.json({ error: "key required" }, { status: 400 });
+  if (!isPublicMediaKey(key)) return NextResponse.json({ error: "Asset not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
   // Object keys only — no absolute URLs, no traversal, no bucket-root escapes.
   if (key.startsWith("/") || key.includes("://") || key.includes("..")) {
     return NextResponse.json({ error: "invalid key" }, { status: 400 });

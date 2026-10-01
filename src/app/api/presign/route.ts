@@ -1,3 +1,4 @@
+import { isPublicMediaKey } from "@/lib/public-media-key";
 import { NextRequest, NextResponse } from "next/server";
 import { presignDownload } from "@/lib/storage";
 
@@ -5,6 +6,7 @@ import { presignDownload } from "@/lib/storage";
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const keys: string[] = Array.isArray(body.keys) ? body.keys : [];
+  if (keys.length > 200 || keys.some(k => !isPublicMediaKey(k))) return NextResponse.json({ error: "Asset not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
   if (keys.length === 0) return NextResponse.json({ urls: {} });
   const out: Record<string, string> = {};
   await Promise.all(
