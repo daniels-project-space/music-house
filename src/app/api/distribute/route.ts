@@ -1,3 +1,5 @@
+import { NextRequest } from "next/server";
+import { renderAuthentication } from "@/lib/render-auth";
 import { tasks } from "@trigger.dev/sdk/v3";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../convex/_generated/api";
@@ -9,7 +11,9 @@ export const runtime = "nodejs";
 // Legacy /api/distribute alias — forwards to the new single-distribute path so existing
 // callers don't break. New UI code calls /api/distribute/single or /api/distribute/album.
 // DistroKid is the only active distributor — RouteNote release automation is retired.
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await renderAuthentication(req);
+  if (auth.response) return auth.response;
   const body = (await req.json()) as {
     trackId?: string;
     leadDays?: number;

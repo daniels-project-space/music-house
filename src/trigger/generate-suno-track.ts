@@ -86,6 +86,7 @@ export function buildAlignedLyrics(
 
 export type SunoGenerateInput = {
   jobId: Id<"generationJobs">;
+  workerToken?: string;
   prompt: string;
   lyrics?: string;
   title?: string;
@@ -104,6 +105,7 @@ export const generateSunoTrack = task({
   retry: { maxAttempts: 1 },
   run: async (input: SunoGenerateInput) => {
     const cx = convexClient();
+    await cx.query(api.jobs.authorizeWorker, { id: input.jobId, workerToken: input.workerToken });
     logger.info("suno:start", { jobId: input.jobId });
 
     try {
@@ -114,7 +116,7 @@ export const generateSunoTrack = task({
       model: input.model ?? "V5_5",
       callbackUrl: input.callbackUrl,
     });
-    await cx.mutation(api.jobs.setRunning, { id: input.jobId, triggerRunId: `suno:${taskId}` });
+    await cx.mutation(api.jobs.setRunning, { id: input.jobId, workerToken: input.workerToken, triggerRunId: `suno:${taskId}` });
 
     const tracks = await suno.pollUntilComplete(taskId, { intervalMs: 6000, timeoutMs: 8 * 60 * 1000 });
 
@@ -247,14 +249,14 @@ export const generateSunoTrack = task({
       }
     }
 
-    await cx.mutation(api.jobs.setComplete, { id: input.jobId, resultTrackIds: created });
+    await cx.mutation(api.jobs.setComplete, { id: input.jobId, workerToken: input.workerToken, resultTrackIds: created });
     logger.info("suno:done", { count: created.length });
     return { trackIds: created };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error("suno:failed", { jobId: input.jobId, error: message.slice(0, 500) });
       try {
-        await cx.mutation(api.jobs.setFailed, { id: input.jobId, error: message.slice(0, 1000) });
+        await cx.mutation(api.jobs.setFailed, { id: input.jobId, workerToken: input.workerToken, error: message.slice(0, 1000) });
       } catch (markFailedError) {
         logger.error("suno:failed-to-record-error", {
           jobId: input.jobId,

@@ -21,6 +21,7 @@ function convexClient() {
 
 export type MurekaGenerateInput = {
   jobId: Id<"generationJobs">;
+  workerToken?: string;
   prompt?: string;
   lyrics?: string;
   title?: string;
@@ -38,6 +39,7 @@ export const generateMurekaTrack = task({
   retry: { maxAttempts: 1 },
   run: async (input: MurekaGenerateInput) => {
     const cx = convexClient();
+    await cx.query(api.jobs.authorizeWorker, { id: input.jobId, workerToken: input.workerToken });
     logger.info("mureka:start", { jobId: input.jobId });
 
     try {
@@ -46,7 +48,7 @@ export const generateMurekaTrack = task({
       lyrics: input.lyrics,
       instrumental: input.instrumental,
     });
-    await cx.mutation(api.jobs.setRunning, { id: input.jobId, triggerRunId: `mureka:${taskId}` });
+    await cx.mutation(api.jobs.setRunning, { id: input.jobId, workerToken: input.workerToken, triggerRunId: `mureka:${taskId}` });
 
     const choices = await mureka.pollUntilComplete(taskId, type, { intervalMs: 6000, timeoutMs: 8 * 60 * 1000 });
 
@@ -87,14 +89,14 @@ export const generateMurekaTrack = task({
       created.push(id);
     }
 
-    await cx.mutation(api.jobs.setComplete, { id: input.jobId, resultTrackIds: created });
+    await cx.mutation(api.jobs.setComplete, { id: input.jobId, workerToken: input.workerToken, resultTrackIds: created });
     logger.info("mureka:done", { count: created.length });
     return { trackIds: created };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error("mureka:failed", { jobId: input.jobId, error: message.slice(0, 500) });
       try {
-        await cx.mutation(api.jobs.setFailed, { id: input.jobId, error: message.slice(0, 1000) });
+        await cx.mutation(api.jobs.setFailed, { id: input.jobId, workerToken: input.workerToken, error: message.slice(0, 1000) });
       } catch (markFailedError) {
         logger.error("mureka:failed-to-record-error", {
           jobId: input.jobId,

@@ -1,3 +1,5 @@
+import { NextRequest } from "next/server";
+import { renderAuthentication } from "@/lib/render-auth";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../convex/_generated/api";
 import { researchNiche } from "../../../../lib/nichecraft";
@@ -7,7 +9,9 @@ export const maxDuration = 60;
 
 type Body = { seed?: string };
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await renderAuthentication(req);
+  if (auth.response) return auth.response;
   let body: Body;
   try {
     body = (await req.json()) as Body;

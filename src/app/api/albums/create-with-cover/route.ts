@@ -1,3 +1,5 @@
+import { NextRequest } from "next/server";
+import { renderAuthentication } from "@/lib/render-auth";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../convex/_generated/api";
 import { put } from "../../../../lib/storage";
@@ -79,7 +81,9 @@ async function generateCoverViaFlux(prompt: string, replicateToken: string): Pro
   return Buffer.from(await img.arrayBuffer());
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await renderAuthentication(req);
+  if (auth.response) return auth.response;
   const url = process.env.NEXT_PUBLIC_CONVEX_URL;
   if (!url) return Response.json({ error: "NEXT_PUBLIC_CONVEX_URL not set" }, { status: 500 });
   const cx = new ConvexHttpClient(url);

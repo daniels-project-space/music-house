@@ -1,3 +1,5 @@
+import { NextRequest } from "next/server";
+import { renderAuthentication } from "@/lib/render-auth";
 import { tasks } from "@trigger.dev/sdk/v3";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../convex/_generated/api";
@@ -7,7 +9,9 @@ import type { distributeAlbumDistrokid } from "../../../../trigger/distribute-al
 export const runtime = "nodejs";
 
 // DistroKid is the only active distributor — RouteNote release automation is retired.
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await renderAuthentication(req);
+  if (auth.response) return auth.response;
   const body = (await req.json()) as { albumId?: string; dryRun?: boolean };
   if (!body.albumId) return Response.json({ error: "albumId required" }, { status: 400 });
   const url = process.env.NEXT_PUBLIC_CONVEX_URL;

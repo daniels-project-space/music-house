@@ -1,3 +1,4 @@
+import { renderAuthentication } from "@/lib/render-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 function sentence(value: string) {
@@ -28,6 +29,8 @@ function enhanceForSuno(input: { prompt: string; genre?: string; hasLyrics: bool
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await renderAuthentication(request);
+  if (auth.response) return auth.response;
   let body: Record<string, unknown>;
   try {
     body = await request.json();

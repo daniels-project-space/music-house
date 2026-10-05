@@ -1,3 +1,5 @@
+import { NextRequest } from "next/server";
+import { renderAuthentication } from "@/lib/render-auth";
 import { tasks } from "@trigger.dev/sdk/v3";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../convex/_generated/api";
@@ -8,7 +10,9 @@ export const runtime = "nodejs";
 
 // Primary "Distribute" button endpoint (posted to by src/components/track-row.tsx).
 // DistroKid is the only active distributor — RouteNote is retired.
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const auth = await renderAuthentication(req);
+  if (auth.response) return auth.response;
   const body = (await req.json()) as { trackId?: string; dryRun?: boolean };
   if (!body.trackId) return Response.json({ error: "trackId required" }, { status: 400 });
   const url = process.env.NEXT_PUBLIC_CONVEX_URL;
