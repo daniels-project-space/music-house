@@ -11,7 +11,7 @@ export default function JobsPage() {
     <main className="max-w-[1440px] mx-auto px-8 lg:px-14 py-12">
       <h1 className="font-display text-4xl text-paper">Generation Jobs</h1>
       <p className="text-paper-dim text-sm mt-2 font-mono">{jobs?.length ?? 0} total</p>
-      {!authenticated && <a href="/api/auth/login" className="text-purple text-sm">Log in to view your render jobs.</a>}
+      {!authenticated && <p className="text-dim text-sm">Preparing this browser’s render session…</p>}
       <div className="mt-8 space-y-2">
         {(jobs ?? []).slice().reverse().map((j) => (
           <div key={j._id} className="border border-rule-soft/60 rounded p-4 flex items-center justify-between">

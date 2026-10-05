@@ -8,7 +8,7 @@ export function useRenderLogin() {
     const controller=new AbortController();
     const read=async()=>{
       try{
-        const session=await fetch("/api/auth/session",{cache:"no-store",signal:controller.signal});
+        const session=await fetch("/api/auth/session",{method:"POST",cache:"no-store",signal:controller.signal});
         const value=await session.json();setAuthenticated(value.authenticated===true);
         if(value.authenticated){const response=await fetch("/api/jobs",{cache:"no-store",signal:controller.signal});if(response.ok)setOwnJobs((await response.json()).jobs);}
         else setOwnJobs([]);

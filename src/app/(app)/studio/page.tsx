@@ -229,7 +229,7 @@ export default function StudioPage() {
             {submitting ? "Starting render…" : generator === "minimax" ? "Generate with MiniMax Music3" : "Generate with Suno"}
           </button>
 
-          {!authenticated && <a href="/api/auth/login" className="block rounded-md border border-brd p-3 text-sm text-purple">Log in with Google to render. Viewing stays public.</a>}
+          {!authenticated && <p className="text-sm text-dim">Preparing this browser’s render session…</p>}
           {feedback ? <FeedbackNotice feedback={feedback} /> : null}
         </form>
       </section>
