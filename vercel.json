@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    {
+      "source": "/:path((?!api/|api$).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "music-house-danielmabro-news-projects\\.vercel\\.app"
+        }
+      ],
+      "destination": "https://music-house-nine.vercel.app/:path*",
+      "permanent": true
+    }
+  ]
+}
